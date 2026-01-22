@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Caro - AI Bất Bại</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 { margin-bottom: 10px; }
+
+        #status {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #f1c40f;
+        }
+
+        /* Container cho bàn cờ có thể cuộn nếu màn hình nhỏ */
+        .board-container {
+            width: 100%;
+            height: 80vh;
+            overflow: auto;
+            background: #34495e;
+            border: 5px solid #ecf0f1;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        #board {
+            display: grid;
+            /* Tạo lưới 30x30 */
+            grid-template-columns: repeat(30, 30px);
+            grid-template-rows: repeat(30, 30px);
+            gap: 1px;
+            background-color: #7f8c8d; /* Màu đường kẻ */
+            border: 1px solid #7f8c8d;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #ecf0f1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        .cell:hover {
+            background-color: #bdc3c7;
+        }
+
+        .cell.x { color: #e74c3c; } /* Người chơi màu Đỏ */
+        .cell.o { color: #2980b9; } /* AI màu Xanh */
+
+        /* Highlight nước đi cuối cùng */
+        .last-move {
+            background-color: #f1c40f !important;
+            box-shadow: 0 0 10px #f1c40f;
+            z-index: 10;
+        }
+
+        .controls {
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        button:hover { background-color: #27ae60; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Caro vs AI (Khó)</h1>
+    <div id="status">Đang chọn người đi trước...</div>
+    
+    <div class="board-container">
+        <div id="board"></div>
+    </div>
+
+    <div class="controls">
+        <button onclick="resetGame()">Ván Mới</button>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 30; // Giả lập vô hạn bằng lưới lớn
+        const WIN_COUNT = 5;
+        let board = [];
+        let isGameActive = true;
+        let humanSymbol = 'X';
+        let aiSymbol = 'O';
+        let lastMove = null; // Lưu vị trí nước đi cuối để highlight
+        
+        // Trạng thái lượt đi
+        let isHumanTurn = false; 
+
+        const boardElement = document.getElementById('board');
+        const statusElement = document.getElementById('status');
+
+        // Khởi tạo game
+        function initGame() {
+            board = [];
+            boardElement.innerHTML = '';
+            
+            // Tạo mảng dữ liệu và giao diện
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                let row = [];
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    row.push('');
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', onCellClick);
+                    boardElement.appendChild(cell);
+                }
+                board.push(row);
+            }
+
+            // Random ai đi trước
+            if (Math.random() < 0.5) {
+                isHumanTurn = true;
+                statusElement.innerText = "Bạn đi trước (X)";
+            } else {
+                isHumanTurn = false;
+                statusElement.innerText = "AI đi trước (O)";
+                setTimeout(aiMove, 500);
+            }
+            isGameActive = true;
+            lastMove = null;
+        }
+
+        function onCellClick(e) {
+            if (!isHumanTurn || !isGameActive) return;
+
+            const row = parseInt(e.target.dataset.row);
+            const col = parseInt(e.target.dataset.col);
+
+            if (board[row][col] !== '') return;
+
+            makeMove(row, col, humanSymbol);
+            
+            if (checkWin(row, col, humanSymbol)) {
+                statusElement.innerText = "Bạn đã thắng! (Điều không tưởng)";
+                isGameActive = false;
+                return;
+            }
+
+            isHumanTurn = false;
+            statusElement.innerText = "AI đang suy nghĩ...";
+            
+            // AI đi sau một khoảng trễ nhỏ để tạo cảm giác tự nhiên
+            setTimeout(aiMove, 100); 
+        }
+
+        function makeMove(row, col, symbol) {
+            board[row][col] = symbol;
+            const index = row * BOARD_SIZE + col;
+            const cell = boardElement.children[index];
+            cell.classList.add(symbol === humanSymbol ? 'x' : 'o');
+            cell.innerText = symbol;
+
+            // Xử lý highlight
+            if (lastMove) {
+                lastMove.classList.remove('last-move');
+            }
+            cell.classList.add('last-move');
+            lastMove = cell;
+        }
+
+        // --- AI LOGIC (HEURISTIC) ---
+        function aiMove() {
+            if (!isGameActive) return;
+
+            // Tìm nước đi tốt nhất
+            let bestScore = -Infinity;
+            let move = null;
+
+            // Chỉ duyệt qua các ô trống có "hàng xóm" (tối ưu hiệu năng)
+            // Hoặc duyệt toàn bộ nếu bàn cờ chưa quá lớn (30x30 = 900 ô vẫn nhanh với JS hiện đại)
+            let candidateMoves = [];
+
+            // Nếu bàn cờ trống trơn (AI đi đầu), đánh vào giữa
+            let emptyBoard = true;
+            for(let r=0; r<BOARD_SIZE; r++){
+                for(let c=0; c<BOARD_SIZE; c++){
+                    if(board[r][c] !== '') {
+                        emptyBoard = false;
+                        break;
+                    }
+                }
+            }
+            
+            if(emptyBoard) {
+                move = {r: Math.floor(BOARD_SIZE/2), c: Math.floor(BOARD_SIZE/2)};
+            } else {
+                // Duyệt tất cả các ô trống
+                for (let r = 0; r < BOARD_SIZE; r++) {
+                    for (let c = 0; c < BOARD_SIZE; c++) {
+                        if (board[r][c] === '') {
+                            // Kiểm tra xem ô này có lân cận với ô đã đánh không (để không tính toán ô xa tít mù khơi)
+                            if (hasNeighbor(r, c)) {
+                                let score = evaluatePosition(r, c);
+                                if (score > bestScore) {
+                                    bestScore = score;
+                                    move = { r, c };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (move) {
+                makeMove(move.r, move.c, aiSymbol);
+                if (checkWin(move.r, move.c, aiSymbol)) {
+                    statusElement.innerText = "AI đã thắng!";
+                    isGameActive = false;
+                } else {
+                    isHumanTurn = true;
+                    statusElement.innerText = "Lượt của bạn (X)";
+                }
+            }
+        }
+
+        // Kiểm tra xem ô có lân cận quân cờ nào không (trong phạm vi 2 ô)
+        function hasNeighbor(row, col) {
+            const range = 2;
+            for (let r = row - range; r <= row + range; r++) {
+                for (let c = col - range; c <= col + range; c++) {
+                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                        if (board[r][c] !== '') return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Hàm tính điểm cho ô trống (r, c)
+        // Nguyên tắc: Tấn công (tạo chuỗi của AI) + Phòng thủ (chặn chuỗi của Người chơi)
+        function evaluatePosition(row, col) {
+            let attackScore = getScore(row, col, aiSymbol, humanSymbol); // Điểm tấn công
+            let defenseScore = getScore(row, col, humanSymbol, aiSymbol); // Điểm phòng thủ
+
+            // AI ưu tiên tấn công nếu có thể thắng ngay, nhưng nếu nguy cấp phải phòng thủ
+            // Hệ số phòng thủ cao hơn một chút để đảm bảo an toàn
+            return attackScore + defenseScore;
+        }
+
+        function getScore(row, col, mySym, oppSym) {
+            let score = 0;
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]]; // Ngang, Dọc, Chéo, Chéo ngược
+
+            for (let [dr, dc] of directions) {
+                let count = 0;
+                let openEnds = 0; // Đầu mở (không bị chặn)
+                
+                // Đếm về một phía
+                let r = row + dr;
+                let c = col + dc;
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === mySym) {
+                    count++;
+                    r += dr;
+                    c += dc;
+                }
+                if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === '') openEnds++;
+
+                // Đếm về phía ngược lại
+                r = row - dr;
+                c = col - dc;
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === mySym) {
+                    count++;
+                    r -= dr;
+                    c -= dc;
+                }
+                if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === '') openEnds++;
+
+                // Hệ thống điểm số (Heuristic)
+                if (count >= 4) score += 100000;       // 5 ô -> Thắng ngay (hoặc chặn thắng)
+                else if (count === 3 && openEnds === 2) score += 10000; // 4 ô mở 2 đầu -> Chắc chắn thắng sau 1 nước
+                else if (count === 3 && openEnds === 1) score += 1000;  // 4 ô bị chặn 1 đầu
+                else if (count === 2 && openEnds === 2) score += 500;   // 3 ô mở 2 đầu
+                else if (count === 2 && openEnds === 1) score += 100;
+                else if (count === 1 && openEnds === 2) score += 50;
+            }
+            return score;
+        }
+
+        // Hàm kiểm tra thắng thua
+        function checkWin(row, col, symbol) {
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+            for (let [dr, dc] of directions) {
+                let count = 1;
+                // Duyệt dương
+                let r = row + dr;
+                let c = col + dc;
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === symbol) {
+                    count++;
+                    r += dr;
+                    c += dc;
+                }
+                // Duyệt âm
+                r = row - dr;
+                c = col - dc;
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === symbol) {
+                    count++;
+                    r -= dr;
+                    c -= dc;
+                }
+                if (count >= WIN_COUNT) return true;
+            }
+            return false;
+        }
+
+        function resetGame() {
+            initGame();
+        }
+
+        // Start
+        initGame();
+
+    </script>
+</body>
+</html>
