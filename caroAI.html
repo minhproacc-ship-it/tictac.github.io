@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Caro Vô Tận - Đấu với AI</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #222; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        .turn-x { color: #e74c3c; font-weight: bold; }
+        .turn-o { color: #3498db; font-weight: bold; }
+        #reset { 
+            margin-top: 10px; pointer-events: auto; cursor: pointer;
+            background: #444; color: white; border: none; padding: 5px 10px; border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div id="status">Lượt của: <span class="turn-x">Bạn (X)</span></div>
+    <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">
+        - Bạn là <b>X</b>, Máy là <b>O</b><br>
+        - Kéo để di chuyển, cuộn để zoom
+    </div>
+    <button id="reset" onclick="resetGame()">Chơi lại</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+
+    let board = {}; 
+    let turn = "X";
+    let gameOver = false;
+    let camera = { x: 0, y: 0, zoom: 1 };
+    let isDragging = false;
+    let lastMousePos = { x: 0, y: 0 };
+    const cellSize = 40;
+
+    function init() {
+        window.addEventListener('resize', resize);
+        resize();
+        canvas.addEventListener('mousedown', (e) => { isDragging = false; lastMousePos = { x: e.clientX, y: e.clientY }; });
+        window.addEventListener('mousemove', (e) => {
+            if (e.buttons === 1) {
+                const dx = e.clientX - lastMousePos.x;
+                const dy = e.clientY - lastMousePos.y;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    isDragging = true;
+                    camera.x += dx; camera.y += dy;
+                    lastMousePos = { x: e.clientX, y: e.clientY };
+                }
+            }
+        });
+        canvas.addEventListener('wheel', (e) => {
+            camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1);
+            camera.zoom = Math.min(Math.max(camera.zoom, 0.3), 3);
+        });
+        canvas.addEventListener('click', handleClick);
+        render();
+    }
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+
+    function screenToWorld(sx, sy) {
+        const x = Math.floor((sx - canvas.width/2 - camera.x) / (cellSize * camera.zoom));
+        const y = Math.floor((sy - canvas.height/2 - camera.y) / (cellSize * camera.zoom));
+        return { x, y };
+    }
+
+    function handleClick(e) {
+        if (isDragging || gameOver || turn === "O") return;
+        const pos = screenToWorld(e.clientX, e.clientY);
+        if (!board[`${pos.x},${pos.y}`]) {
+            makeMove(pos.x, pos.y, "X");
+            if (!gameOver) {
+                statusEl.innerHTML = `Máy đang suy nghĩ...`;
+                setTimeout(aiMove, 500); // Máy chờ 0.5s để trông như đang nghĩ
+            }
+        }
+    }
+
+    function makeMove(x, y, p) {
+        board[`${x},${y}`] = p;
+        if (checkWin(x, y, p)) {
+            statusEl.innerHTML = p === "X" ? "BẠN THẮNG!" : "MÁY THẮNG!";
+            gameOver = true;
+        } else {
+            turn = p === "X" ? "O" : "X";
+            statusEl.innerHTML = `Lượt của: <span class="turn-${turn.toLowerCase()}">${turn === "X" ? "Bạn (X)" : "Máy (O)"}</span>`;
+        }
+    }
+
+    // --- LOGIC AI ---
+    function aiMove() {
+        if (gameOver) return;
+        let bestScore = -Infinity;
+        let move = null;
+
+        // Tìm tất cả ô trống quanh các quân cờ hiện tại
+        let candidates = new Set();
+        for (let key in board) {
+            let [x, y] = key.split(',').map(Number);
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    if (!board[`${x+i},${y+j}`]) candidates.add(`${x+i},${y+j}`);
+                }
+            }
+        }
+
+        if (candidates.size === 0) { // Nếu bàn cờ trống
+            move = { x: 0, y: 0 };
+        } else {
+            candidates.forEach(key => {
+                let [x, y] = key.split(',').map(Number);
+                let score = evaluateMove(x, y);
+                if (score > bestScore) {
+                    bestScore = score;
+                    move = { x, y };
+                }
+            });
+        }
+
+        if (move) makeMove(move.x, move.y, "O");
+    }
+
+    function evaluateMove(x, y) {
+        // AI ưu tiên: Tấn công của O + Phòng thủ chống lại X
+        return getScore(x, y, "O") * 1.1 + getScore(x, y, "X"); 
+    }
+
+    function getScore(x, y, p) {
+        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+        let totalScore = 0;
+        for (let [dx, dy] of dirs) {
+            let count = 1;
+            count += countInDir(x, y, dx, dy, p);
+            count += countInDir(x, y, -dx, -dy, p);
+            
+            if (count >= 5) totalScore += 100000; // Thắng ngay
+            else if (count === 4) totalScore += 5000;
+            else if (count === 3) totalScore += 500;
+            else if (count === 2) totalScore += 50;
+        }
+        return totalScore;
+    }
+
+    // --- HÀM HỖ TRỢ ---
+    function checkWin(x, y, p) {
+        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+        for (let [dx, dy] of dirs) {
+            if (1 + countInDir(x, y, dx, dy, p) + countInDir(x, y, -dx, -dy, p) >= 5) return true;
+        }
+        return false;
+    }
+
+    function countInDir(x, y, dx, dy, p) {
+        let c = 0, nx = x + dx, ny = y + dy;
+        while (board[`${nx},${ny}`] === p) { c++; nx += dx; ny += dy; }
+        return c;
+    }
+
+    function render() {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const currentCell = cellSize * camera.zoom;
+        const offX = (canvas.width/2 + camera.x) % currentCell;
+        const offY = (canvas.height/2 + camera.y) % currentCell;
+
+        ctx.beginPath(); ctx.strokeStyle = "#eee";
+        for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
+        for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+        ctx.stroke();
+
+        for (let key in board) {
+            const [bx, by] = key.split(',').map(Number);
+            const pX = bx * currentCell + canvas.width/2 + camera.x;
+            const pY = by * currentCell + canvas.height/2 + camera.y;
+            if (pX + currentCell > 0 && pX < canvas.width && pY + currentCell > 0 && pY < canvas.height) {
+                drawPiece(pX, pY, board[key], currentCell);
+            }
+        }
+        requestAnimationFrame(render);
+    }
+
+    function drawPiece(x, y, type, size) {
+        ctx.lineWidth = size * 0.1;
+        const p = size * 0.2;
+        ctx.strokeStyle = type === "X" ? "#e74c3c" : "#3498db";
+        ctx.beginPath();
+        if (type === "X") {
+            ctx.moveTo(x+p, y+p); ctx.lineTo(x+size-p, y+size-p);
+            ctx.moveTo(x+size-p, y+p); ctx.lineTo(x+p, y+size-p);
+        } else {
+            ctx.arc(x+size/2, y+size/2, size/2-p, 0, Math.PI*2);
+        }
+        ctx.stroke();
+    }
+
+    function resetGame() {
+        board = {}; turn = "X"; gameOver = false;
+        camera = { x: 0, y: 0, zoom: 1 };
+        statusEl.innerHTML = `Lượt của: <span class="turn-x">Bạn (X)</span>`;
+    }
+
+    init();
+</script>
+</body>
+</html>
