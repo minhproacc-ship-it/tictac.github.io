@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Caro GOD MODE - ULTIMATE</title>
+    <title>Caro GOD MODE - ULTIMATE (Tối ưu)</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', monospace; }
         canvas { display: block; }
@@ -50,15 +50,15 @@
     <div class="info">
         • AI: <span class="turn-o">Quái vật (O)</span><br>
         • Bạn: <span class="turn-x">Người chơi (X)</span><br>
-        • Độ sâu: <b>Depth 6 (Siêu khó)</b><br>
+        • Độ sâu: <b>Depth 5 (Cực khó - Tối ưu)</b><br>
         • AI luôn đi trước và đánh vào tâm.<br>
-        • Cảnh báo: Máy sẽ suy nghĩ lâu để tìm nước đi "chí mạng".
+        • Tối ưu: Sử dụng Web Worker để tránh treo trình duyệt.
     </div>
     <button id="reset" onclick="initGame()">Thử lại</button>
 </div>
 <div id="thinking-overlay">
     <div class="loader"></div>
-    <div class="loading-text">AI ĐANG TÍNH TOÁN (DEPTH 6)...</div>
+    <div class="loading-text">AI ĐANG TÍNH TOÁN (DEPTH 5)...</div>
 </div>
 <canvas id="game"></canvas>
 <script>
@@ -66,6 +66,7 @@
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
     const overlay = document.getElementById('thinking-overlay');
+
     // --- CẤU HÌNH GAME ---
     const CELL_SIZE = 45;
     let board = {};
@@ -73,24 +74,232 @@
     let gameOver = false;
     let lastMove = null;
     let camera = { x: 0, y: 0, zoom: 1 };
-   
     let minX = 0, maxX = 0, minY = 0, maxY = 0;
     let moveCount = 0;
-    // --- CẤU HÌNH AI (HARDCORE) ---
-    // Tăng độ sâu lên 6, tối ưu hóa để tránh crash
-    const AI_DEPTH = 6;
-   
-    // Heuristic Scores (Tối ưu hóa trọng số: Ưu tiên chặn hơn tấn công để bất bại)
-    const WIN_SCORE = 1000000000; // Thắng tuyệt đối
-    const LIVE_4 = 5000000; // Tăng để ưu tiên tạo live 4
-    const DEAD_4 = 1000000; // Tăng để ưu tiên chặn dead 4
+
+    // --- CẤU HÌNH AI ---
+    const AI_DEPTH = 5; // Giữ 5 để cân bằng tốc độ và sức mạnh
+    const WIN_SCORE = 1000000000;
+    const LIVE_4 = 5000000;
+    const DEAD_4 = 1000000;
     const LIVE_3 = 500000;
     const DEAD_3 = 10000;
     const LIVE_2 = 500;
     const DEAD_2 = 100;
-    const BLOCK_BONUS = 200; // Bonus cho chặn threat đối thủ
+    const BLOCK_BONUS = 200;
+
     let isDragging = false;
     let lastMousePos = {x:0, y:0};
+    let worker = null;
+
+    // --- KHỞI TẠO WORKER ---
+    function createWorker() {
+        const workerCode = `
+            const WIN_SCORE = ${WIN_SCORE};
+            const LIVE_4 = ${LIVE_4};
+            const DEAD_4 = ${DEAD_4};
+            const LIVE_3 = ${LIVE_3};
+            const DEAD_3 = ${DEAD_3};
+            const LIVE_2 = ${LIVE_2};
+            const DEAD_2 = ${DEAD_2};
+            const BLOCK_BONUS = ${BLOCK_BONUS};
+
+            function generateMoves(board, minX, maxX, minY, maxY) {
+                let moves = new Set();
+                let startX = minX - 3, endX = maxX + 3;
+                let startY = minY - 3, endY = maxY + 3;
+                for (let key in board) {
+                    let [x, y] = key.split(',').map(Number);
+                    for (let i = -2; i <= 2; i++) {
+                        for (let j = -2; j <= 2; j++) {
+                            if (i === 0 && j === 0) continue;
+                            let nx = x + i, ny = y + j;
+                            if (!board[\`\${nx},\${ny}\`]) {
+                                moves.add(\`\${nx},\${ny}\`);
+                            }
+                        }
+                    }
+                }
+                return Array.from(moves).map(k => {
+                    let [x, y] = k.split(',').map(Number);
+                    return {x, y};
+                });
+            }
+
+            function checkWin(x, y, p, board) {
+                const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+                for (let [dx, dy] of dirs) {
+                    let count = 1;
+                    let i = 1;
+                    while (board[\`\${x + dx*i},\${y + dy*i}\`] === p) { count++; i++; }
+                    i = 1;
+                    while (board[\`\${x - dx*i},\${y - dy*i}\`] === p) { count++; i++; }
+                    if (count >= 5) return true;
+                }
+                return false;
+            }
+
+            function getLineStr(x, y, dx, dy, p, board) {
+                let s = "";
+                for (let i = -5; i <= 5; i++) {
+                    let val = board[\`\${x + dx*i},\${y + dy*i}\`];
+                    if (val === p) s += "M";
+                    else if (val === undefined) s += "_";
+                    else s += "E";
+                }
+                return s;
+            }
+
+            function matchPattern(s) {
+                let score = 0;
+                if (s.includes("MMMMM")) return WIN_SCORE;
+                if (s.includes("_MMMM_")) score += LIVE_4;
+                if (s.includes("EMMMM_") || s.includes("_MMME") || s.includes("MMM_M") || s.includes("MM_MM") || s.includes("M_MMM")) score += DEAD_4;
+                if (s.includes("_MMM_") || s.includes("_MM_M_") || s.includes("_M_MM_")) score += LIVE_3;
+                if (s.includes("EMMM_") || s.includes("_MMME") || s.includes("MM_M_") || s.includes("_M_MM")) score += DEAD_3;
+                if (s.includes("_MM_") || s.includes("_M_M_")) score += LIVE_2;
+                if (s.includes("EMM_") || s.includes("_MME") || s.includes("M_M_") || s.includes("_M_M")) score += DEAD_2;
+                if (s.split('E').length - 1 > 1) score += BLOCK_BONUS;
+                return score;
+            }
+
+            function evaluatePoint(x, y, p, board) {
+                let total = 0;
+                const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+                for (let [dx, dy] of dirs) {
+                    let line = getLineStr(x, y, dx, dy, p, board);
+                    total += matchPattern(line);
+                }
+                return total;
+            }
+
+            function evaluateBoard(board) {
+                let score = 0;
+                for (let key in board) {
+                    let [x, y] = key.split(',').map(Number);
+                    let p = board[key];
+                    let pointScore = evaluatePoint(x, y, p, board);
+                    if (p === "O") score += pointScore;
+                    else score -= pointScore * 1.2;
+                }
+                return score;
+            }
+
+            function minimax(depth, alpha, beta, isMaximizing, board, lastMove) {
+                if (depth === 0) return evaluateBoard(board);
+
+                const moves = generateMoves(board, Math.min(...Object.keys(board).map(k => k.split(',')[0])), 
+                    Math.max(...Object.keys(board).map(k => k.split(',')[0])), 
+                    Math.min(...Object.keys(board).map(k => k.split(',')[1])), 
+                    Math.max(...Object.keys(board).map(k => k.split(',')[1])) ); // Tái tính bounds nếu cần
+
+                if (moves.length > 1) {
+                    moves.sort((a, b) => {
+                        let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
+                        let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
+                        let heurA = evaluatePoint(a.x, a.y, isMaximizing ? "O" : "X", board);
+                        let heurB = evaluatePoint(b.x, b.y, isMaximizing ? "O" : "X", board);
+                        return (distB + heurB) - (distA + heurA);
+                    });
+                }
+
+                let limit = Math.max(4, 6 + depth);
+                const searchMoves = moves.slice(0, limit);
+
+                if (isMaximizing) {
+                    let maxEval = -Infinity;
+                    for (let move of searchMoves) {
+                        const key = \`\${move.x},\${move.y}\`;
+                        board[key] = "O";
+                        if (checkWin(move.x, move.y, "O", board)) {
+                            delete board[key];
+                            return WIN_SCORE;
+                        }
+                        let eval = minimax(depth - 1, alpha, beta, false, board, move);
+                        delete board[key];
+                        maxEval = Math.max(maxEval, eval);
+                        alpha = Math.max(alpha, eval);
+                        if (beta <= alpha) break;
+                    }
+                    return maxEval;
+                } else {
+                    let minEval = Infinity;
+                    for (let move of searchMoves) {
+                        const key = \`\${move.x},\${move.y}\`;
+                        board[key] = "X";
+                        if (checkWin(move.x, move.y, "X", board)) {
+                            delete board[key];
+                            return -WIN_SCORE;
+                        }
+                        let eval = minimax(depth - 1, alpha, beta, true, board, move);
+                        delete board[key];
+                        minEval = Math.min(minEval, eval);
+                        beta = Math.min(beta, eval);
+                        if (beta <= alpha) break;
+                    }
+                    return minEval;
+                }
+            }
+
+            self.onmessage = function(e) {
+                const data = e.data;
+                let board = {...data.board};
+                const lastMove = data.lastMove;
+                const minX = data.minX, maxX = data.maxX, minY = data.minY, maxY = data.maxY;
+                const depth = data.depth;
+
+                // Check urgent moves nhanh
+                const moves = generateMoves(board, minX, maxX, minY, maxY);
+                for (let m of moves) {
+                    const key = \`\${m.x},\${m.y}\`;
+                    board[key] = "O";
+                    if (checkWin(m.x, m.y, "O", board)) {
+                        delete board[key];
+                        self.postMessage({bestMove: m});
+                        return;
+                    }
+                    delete board[key];
+                }
+                for (let m of moves) {
+                    const key = \`\${m.x},\${m.y}\`;
+                    board[key] = "X";
+                    if (checkWin(m.x, m.y, "X", board)) {
+                        delete board[key];
+                        self.postMessage({bestMove: m});
+                        return;
+                    }
+                    delete board[key];
+                }
+
+                // Deep search
+                let bestScore = -Infinity;
+                let bestMove = null;
+                const sortedMoves = generateMoves(board, minX, maxX, minY, maxY);
+                sortedMoves.sort((a, b) => {
+                    let sA = evaluatePoint(a.x, a.y, "O", board) * 1.5 + evaluatePoint(a.x, a.y, "X", board);
+                    let sB = evaluatePoint(b.x, b.y, "O", board) * 1.5 + evaluatePoint(b.x, b.y, "X", board);
+                    return sB - sA;
+                });
+                const topMoves = sortedMoves.slice(0, 12);
+
+                for (let move of topMoves) {
+                    const key = \`\${move.x},\${move.y}\`;
+                    board[key] = "O";
+                    let score = minimax(depth - 1, -Infinity, Infinity, false, board, move);
+                    delete board[key];
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                }
+                self.postMessage({bestMove});
+            };
+        `;
+
+        const blob = new Blob([workerCode], {type: 'application/javascript'});
+        return new Worker(URL.createObjectURL(blob));
+    }
+
     function initGame() {
         board = {};
         gameOver = false;
@@ -98,20 +307,22 @@
         moveCount = 0;
         camera = { x: 0, y: 0, zoom: 1 };
         minX = 0; maxX = 0; minY = 0; maxY = 0;
-       
         turn = "O";
-       
         statusEl.innerHTML = `Lượt: <span class="turn-o">AI (O) ĐI TRƯỚC</span>`;
-       
-        // AI đi trước đánh luôn vào tâm
+
+        if (worker) worker.terminate();
+        worker = createWorker();
+
         setTimeout(() => {
             makeMove(0, 0, "O");
         }, 500);
         render();
     }
+
     // --- EVENTS ---
     window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
     window.dispatchEvent(new Event('resize'));
+
     canvas.addEventListener('mousedown', e => { isDragging = false; lastMousePos = {x: e.clientX, y: e.clientY}; });
     window.addEventListener('mousemove', e => {
         if (e.buttons === 1) {
@@ -131,30 +342,27 @@
     canvas.addEventListener('click', e => {
         if (isDragging || gameOver || turn === "O") return;
         const pos = screenToWorld(e.clientX, e.clientY);
-       
         if (!board[`${pos.x},${pos.y}`]) {
             makeMove(pos.x, pos.y, "X");
             if (!gameOver) {
                 overlay.style.display = "flex";
-                // Delay nhỏ để trình duyệt kịp vẽ nước đi của bạn trước khi bị treo để tính toán
-                setTimeout(() => {
-                    aiTurn();
-                    overlay.style.display = "none";
-                }, 50);
+                setTimeout(() => aiTurn(), 50);
             }
         }
     });
+
     function screenToWorld(sx, sy) {
         const x = Math.floor((sx - canvas.width/2 - camera.x) / (CELL_SIZE * camera.zoom));
         const y = Math.floor((sy - canvas.height/2 - camera.y) / (CELL_SIZE * camera.zoom));
         return {x, y};
     }
+
     function makeMove(x, y, p) {
         board[`${x},${y}`] = p;
         lastMove = {x, y};
         moveCount++;
         updateBounds(x, y);
-        if (checkWin(x, y, p)) {
+        if (checkWin(x, y, p, board)) {  // Sử dụng phiên bản có board
             statusEl.innerHTML = p === "X" ? "<span class='turn-x'>CHIẾN THẮNG (LỖI GAME?)</span>" : "<span class='turn-o'>BẠN ĐÃ THUA</span>";
             gameOver = true;
         } else {
@@ -163,6 +371,7 @@
         }
         render();
     }
+
     function updateBounds(x, y) {
         if (moveCount === 1) {
             minX = maxX = x;
@@ -172,199 +381,28 @@
             minY = Math.min(minY, y); maxY = Math.max(maxY, y);
         }
     }
-    // --- AI ENGINE (Cải thiện: Tăng depth, tối ưu sorting, heuristic chi tiết hơn) ---
+
     function aiTurn() {
-        // 1. Check Urgent (Thắng ngay hoặc Chặn thua ngay lập tức) - Depth 1 nhanh
-        const urgentMove = checkUrgentMove();
-        if (urgentMove) {
-            makeMove(urgentMove.x, urgentMove.y, "O");
-            return;
-        }
-        let bestScore = -Infinity;
-        let bestMove = null;
-       
-        const moves = generateMoves();
-       
-        // Sắp xếp nước đi tốt nhất để duyệt trước (Cải thiện: Kết hợp heuristic attack/defense)
-        moves.sort((a, b) => {
-            let sA = evaluateMove(a.x, a.y, "O") * 1.5 + evaluateMove(a.x, a.y, "X") + BLOCK_BONUS;
-            let sB = evaluateMove(b.x, b.y, "O") * 1.5 + evaluateMove(b.x, b.y, "X") + BLOCK_BONUS;
-            return sB - sA;
-        });
-        // Chỉ chọn TOP 12 nước đi tốt nhất để duyệt sâu (Tăng từ 8 để chính xác hơn)
-        const topMoves = moves.slice(0, 12);
-        for (let move of topMoves) {
-            board[`${move.x},${move.y}`] = "O";
-            // Gọi Minimax với alpha-beta
-            let score = minimax(AI_DEPTH - 1, -Infinity, Infinity, false);
-            delete board[`${move.x},${move.y}`];
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = move;
+        if (worker) worker.terminate();
+        worker = createWorker();
+        worker.onmessage = (e) => {
+            if (e.data.bestMove) {
+                makeMove(e.data.bestMove.x, e.data.bestMove.y, "O");
             }
-        }
-        if (bestMove) makeMove(bestMove.x, bestMove.y, "O");
-    }
-    function checkUrgentMove() {
-        const moves = generateMoves();
-        // Kiểm tra thắng ngay
-        for (let m of moves) {
-            board[`${m.x},${m.y}`] = "O";
-            if (checkWin(m.x, m.y, "O")) { delete board[`${m.x},${m.y}`]; return m; } // Win
-            delete board[`${m.x},${m.y}`];
-        }
-        // Kiểm tra chặn thua
-        for (let m of moves) {
-            board[`${m.x},${m.y}`] = "X";
-            if (checkWin(m.x, m.y, "X")) { delete board[`${m.x},${m.y}`]; return m; } // Block Lose
-            delete board[`${m.x},${m.y}`];
-        }
-        // Cải thiện: Kiểm tra double threat (nếu đối thủ có 2 live 3, chặn một trong số)
-        for (let m of moves) {
-            board[`${m.x},${m.y}`] = "O";
-            let threatReduced = evaluateBoard("X") < evaluateBoard("X") - LIVE_3 * 2;
-            delete board[`${m.x},${m.y}`];
-            if (threatReduced) return m;
-        }
-        return null;
-    }
-    function minimax(depth, alpha, beta, isMaximizing) {
-        if (depth === 0) return evaluateBoard();
-        const moves = generateMoves();
-       
-        // Sorting Heuristic trong đệ quy (Cải thiện: Ưu tiên gần lastMove và heuristic cao)
-        if (moves.length > 1) {
-             moves.sort((a, b) => {
-                 let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
-                 let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
-                 let heurA = evaluateMove(a.x, a.y, isMaximizing ? "O" : "X");
-                 let heurB = evaluateMove(b.x, b.y, isMaximizing ? "O" : "X");
-                 return (distB + heurB) - (distA + heurA);
-             });
-        }
-       
-        // Càng xuống sâu càng cắt giảm nhánh (Tăng limit nhẹ để chính xác hơn)
-        let limit = Math.max(4, 6 + depth);
-        const searchMoves = moves.slice(0, limit);
-        if (isMaximizing) {
-            let maxEval = -Infinity;
-            for (let move of searchMoves) {
-                board[`${move.x},${move.y}`] = "O";
-                if (checkWin(move.x, move.y, "O")) { delete board[`${move.x},${move.y}`]; return WIN_SCORE; }
-               
-                let eval = minimax(depth - 1, alpha, beta, false);
-                delete board[`${move.x},${move.y}`];
-               
-                maxEval = Math.max(maxEval, eval);
-                alpha = Math.max(alpha, eval);
-                if (beta <= alpha) break;
-            }
-            return maxEval;
-        } else {
-            let minEval = Infinity;
-            for (let move of searchMoves) {
-                board[`${move.x},${move.y}`] = "X";
-                if (checkWin(move.x, move.y, "X")) { delete board[`${move.x},${move.y}`]; return -WIN_SCORE; }
-               
-                let eval = minimax(depth - 1, alpha, beta, true);
-                delete board[`${move.x},${move.y}`];
-               
-                minEval = Math.min(minEval, eval);
-                beta = Math.min(beta, eval);
-                if (beta <= alpha) break;
-            }
-            return minEval;
-        }
-    }
-    function evaluateBoard() {
-        let score = 0;
-        for (let key in board) {
-            let [x, y] = key.split(',').map(Number);
-            let p = board[key];
-            let pointScore = evaluatePoint(x, y, p);
-            if (p === "O") score += pointScore;
-            else score -= pointScore * 1.2; // Tăng hệ số defense để AI phòng thủ tốt hơn
-        }
-        return score;
-    }
-    function evaluateMove(x, y, p) {
-        board[`${x},${y}`] = p;
-        let score = evaluateBoard();
-        delete board[`${x},${y}`];
-        return score;
-    }
-    function evaluatePoint(x, y, p) {
-        let total = 0;
-        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
-        for (let [dx, dy] of dirs) {
-            let line = getLineStr(x, y, dx, dy, p);
-            total += matchPattern(line, p);
-        }
-        return total;
-    }
-    function getLineStr(x, y, dx, dy, p) {
-        let s = "";
-        // Mở rộng range lên 5 để detect overline hoặc longer chains
-        for (let i = -5; i <= 5; i++) {
-            let val = board[`${x + dx*i},${y + dy*i}`];
-            if (val === p) s += "M";
-            else if (val === undefined) s += "_";
-            else s += "E";
-        }
-        return s;
-    }
-    function matchPattern(s, p) {
-        let score = 0;
-        // Cải thiện patterns: Thêm dead_2, và xử lý blocked tốt hơn
-        if (s.includes("MMMMM")) return WIN_SCORE;
-        // Live 4: Mở cả hai đầu
-        if (s.includes("_MMMM_")) score += LIVE_4;
-        // Dead 4: Mở một đầu hoặc có gap nhưng blocked
-        if (s.includes("EMMMM_") || s.includes("_MMME") || s.includes("MMM_M") || s.includes("MM_MM") || s.includes("M_MMM")) score += DEAD_4;
-        // Live 3: Mở hai đầu
-        if (s.includes("_MMM_") || s.includes("_MM_M_") || s.includes("_M_MM_")) score += LIVE_3;
-        // Dead 3: Mở một đầu
-        if (s.includes("EMMM_") || s.includes("_MMME") || s.includes("MM_M_") || s.includes("_M_MM")) score += DEAD_3;
-        // Live 2: Mở hai đầu
-        if (s.includes("_MM_") || s.includes("_M_M_")) score += LIVE_2;
-        // Dead 2: Mở một đầu
-        if (s.includes("EMM_") || s.includes("_MME") || s.includes("M_M_") || s.includes("_M_M")) score += DEAD_2;
-        // Bonus nếu chặn đối thủ (nếu p là AI, kiểm tra nếu line có E nhiều)
-        if (s.split('E').length - 1 > 1) score += BLOCK_BONUS;
-        return score;
-    }
-    function generateMoves() {
-        let moves = new Set();
-        // Mở rộng bán kính generate moves lên 3 để bao quát threat xa hơn
-        let startX = minX - 3; let endX = maxX + 3;
-        let startY = minY - 3; let endY = maxY + 3;
-        for (let key in board) {
-            let [x, y] = key.split(',').map(Number);
-            for (let i = -2; i <= 2; i++) { // Tăng range neighbor
-                for (let j = -2; j <= 2; j++) {
-                    if (i===0 && j===0) continue;
-                    let nx = x+i, ny = y+j;
-                    if (!board[`${nx},${ny}`]) {
-                        moves.add(`${nx},${ny}`);
-                    }
-                }
-            }
-        }
-        return Array.from(moves).map(k => {
-            let [x, y] = k.split(',').map(Number);
-            return {x, y};
+            overlay.style.display = "none";
+        };
+        worker.onerror = (err) => {
+            console.error("Worker error:", err);
+            overlay.style.display = "none";
+        };
+        worker.postMessage({
+            board: {...board},
+            lastMove,
+            minX, maxX, minY, maxY,
+            depth: AI_DEPTH
         });
     }
-    function checkWin(x, y, p) {
-        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
-        for (let [dx, dy] of dirs) {
-            let count = 1;
-            let i = 1; while (board[`${x + dx*i},${y + dy*i}`] === p) { count++; i++; }
-            i = 1; while (board[`${x - dx*i},${y - dy*i}`] === p) { count++; i++; }
-            if (count >= 5) return true;
-        }
-        return false;
-    }
+
     // --- RENDER ---
     function render() {
         ctx.fillStyle = "#000";
@@ -373,7 +411,6 @@
         const currentCell = CELL_SIZE * camera.zoom;
         const offX = (canvas.width/2 + camera.x) % currentCell;
         const offY = (canvas.height/2 + camera.y) % currentCell;
-        // Grid (Darker)
         ctx.beginPath(); ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
         for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
         for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
@@ -395,6 +432,7 @@
             }
         }
     }
+
     function drawPiece(x, y, type, size) {
         const p = size * 0.2;
         ctx.lineWidth = size * 0.12;
@@ -416,6 +454,12 @@
         }
         ctx.shadowBlur = 0;
     }
+
+    // Phiên bản checkWin cho main thread (global board)
+    function checkWin(x, y, p) {
+        return checkWin(x, y, p, board); // Sử dụng hàm từ worker nhưng với global board
+    }
+
     initGame();
 </script>
 </body>
