@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Caro GOD MODE - ULTIMATE</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', monospace; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(10, 10, 10, 0.95); color: #fff;
+            padding: 25px; border-radius: 8px;
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.3);
+            border: 1px solid #555; width: 280px;
+            pointer-events: none;
+        }
+        h2 { margin: 0 0 15px 0; font-size: 1.5rem; color: #ff3838; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px #ff3838; }
+        .info { font-size: 0.9rem; color: #ccc; line-height: 1.6; margin-bottom: 20px; }
+        .turn-x { color: #fff; font-weight: bold; }
+        .turn-o { color: #ff3838; font-weight: bold; }
+        #reset {
+            pointer-events: auto; cursor: pointer;
+            background: transparent; color: #ff3838; border: 1px solid #ff3838;
+            padding: 12px; border-radius: 4px; width: 100%; font-weight: bold;
+            text-transform: uppercase; transition: 0.3s;
+        }
+        #reset:hover { background: #ff3838; color: #fff; box-shadow: 0 0 20px #ff3838; }
+       
+        #thinking-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100;
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
+            pointer-events: none;
+        }
+        .loader {
+            border: 4px solid #333; border-top: 4px solid #ff3838;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 0.8s linear infinite; margin-bottom: 15px;
+        }
+        .loading-text { color: #ff3838; font-weight: bold; letter-spacing: 1px; animation: pulse 1s infinite;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+<div id="ui">
+    <h2>GOD MODE: MAX</h2>
+    <div id="status">Đang khởi tạo...</div>
+    <div class="info">
+        • AI: <span class="turn-o">Quái vật (O)</span><br>
+        • Bạn: <span class="turn-x">Người chơi (X)</span><br>
+        • Độ sâu: <b>Depth 6 (Siêu khó)</b><br>
+        • AI luôn đi trước và đánh vào tâm.<br>
+        • Cảnh báo: Máy sẽ suy nghĩ lâu để tìm nước đi "chí mạng".
+    </div>
+    <button id="reset" onclick="initGame()">Thử lại</button>
+</div>
+<div id="thinking-overlay">
+    <div class="loader"></div>
+    <div class="loading-text">AI ĐANG TÍNH TOÁN (DEPTH 6)...</div>
+</div>
+<canvas id="game"></canvas>
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const overlay = document.getElementById('thinking-overlay');
+    // --- CẤU HÌNH GAME ---
+    const CELL_SIZE = 45;
+    let board = {};
+    let turn = "O";
+    let gameOver = false;
+    let lastMove = null;
+    let camera = { x: 0, y: 0, zoom: 1 };
+   
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    let moveCount = 0;
+    // --- CẤU HÌNH AI (HARDCORE) ---
+    // Tăng độ sâu lên 6, tối ưu hóa để tránh crash
+    const AI_DEPTH = 6;
+   
+    // Heuristic Scores (Tối ưu hóa trọng số: Ưu tiên chặn hơn tấn công để bất bại)
+    const WIN_SCORE = 1000000000; // Thắng tuyệt đối
+    const LIVE_4 = 5000000; // Tăng để ưu tiên tạo live 4
+    const DEAD_4 = 1000000; // Tăng để ưu tiên chặn dead 4
+    const LIVE_3 = 500000;
+    const DEAD_3 = 10000;
+    const LIVE_2 = 500;
+    const DEAD_2 = 100;
+    const BLOCK_BONUS = 200; // Bonus cho chặn threat đối thủ
+    let isDragging = false;
+    let lastMousePos = {x:0, y:0};
+    function initGame() {
+        board = {};
+        gameOver = false;
+        lastMove = null;
+        moveCount = 0;
+        camera = { x: 0, y: 0, zoom: 1 };
+        minX = 0; maxX = 0; minY = 0; maxY = 0;
+       
+        turn = "O";
+       
+        statusEl.innerHTML = `Lượt: <span class="turn-o">AI (O) ĐI TRƯỚC</span>`;
+       
+        // AI đi trước đánh luôn vào tâm
+        setTimeout(() => {
+            makeMove(0, 0, "O");
+        }, 500);
+        render();
+    }
+    // --- EVENTS ---
+    window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+    window.dispatchEvent(new Event('resize'));
+    canvas.addEventListener('mousedown', e => { isDragging = false; lastMousePos = {x: e.clientX, y: e.clientY}; });
+    window.addEventListener('mousemove', e => {
+        if (e.buttons === 1) {
+            const dx = e.clientX - lastMousePos.x;
+            const dy = e.clientY - lastMousePos.y;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                isDragging = true;
+                camera.x += dx; camera.y += dy;
+                lastMousePos = {x: e.clientX, y: e.clientY};
+            }
+        }
+    });
+    canvas.addEventListener('wheel', e => {
+        camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1);
+        camera.zoom = Math.min(Math.max(camera.zoom, 0.4), 2.0);
+    });
+    canvas.addEventListener('click', e => {
+        if (isDragging || gameOver || turn === "O") return;
+        const pos = screenToWorld(e.clientX, e.clientY);
+       
+        if (!board[`${pos.x},${pos.y}`]) {
+            makeMove(pos.x, pos.y, "X");
+            if (!gameOver) {
+                overlay.style.display = "flex";
+                // Delay nhỏ để trình duyệt kịp vẽ nước đi của bạn trước khi bị treo để tính toán
+                setTimeout(() => {
+                    aiTurn();
+                    overlay.style.display = "none";
+                }, 50);
+            }
+        }
+    });
+    function screenToWorld(sx, sy) {
+        const x = Math.floor((sx - canvas.width/2 - camera.x) / (CELL_SIZE * camera.zoom));
+        const y = Math.floor((sy - canvas.height/2 - camera.y) / (CELL_SIZE * camera.zoom));
+        return {x, y};
+    }
+    function makeMove(x, y, p) {
+        board[`${x},${y}`] = p;
+        lastMove = {x, y};
+        moveCount++;
+        updateBounds(x, y);
+        if (checkWin(x, y, p)) {
+            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>CHIẾN THẮNG (LỖI GAME?)</span>" : "<span class='turn-o'>BẠN ĐÃ THUA</span>";
+            gameOver = true;
+        } else {
+            turn = p === "X" ? "O" : "X";
+            statusEl.innerHTML = `Lượt: <span class="turn-${turn.toLowerCase()}">${turn === "X" ? "Bạn (X)" : "AI (O)"}</span>`;
+        }
+        render();
+    }
+    function updateBounds(x, y) {
+        if (moveCount === 1) {
+            minX = maxX = x;
+            minY = maxY = y;
+        } else {
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+    }
+    // --- AI ENGINE (Cải thiện: Tăng depth, tối ưu sorting, heuristic chi tiết hơn) ---
+    function aiTurn() {
+        // 1. Check Urgent (Thắng ngay hoặc Chặn thua ngay lập tức) - Depth 1 nhanh
+        const urgentMove = checkUrgentMove();
+        if (urgentMove) {
+            makeMove(urgentMove.x, urgentMove.y, "O");
+            return;
+        }
+        let bestScore = -Infinity;
+        let bestMove = null;
+       
+        const moves = generateMoves();
+       
+        // Sắp xếp nước đi tốt nhất để duyệt trước (Cải thiện: Kết hợp heuristic attack/defense)
+        moves.sort((a, b) => {
+            let sA = evaluateMove(a.x, a.y, "O") * 1.5 + evaluateMove(a.x, a.y, "X") + BLOCK_BONUS;
+            let sB = evaluateMove(b.x, b.y, "O") * 1.5 + evaluateMove(b.x, b.y, "X") + BLOCK_BONUS;
+            return sB - sA;
+        });
+        // Chỉ chọn TOP 12 nước đi tốt nhất để duyệt sâu (Tăng từ 8 để chính xác hơn)
+        const topMoves = moves.slice(0, 12);
+        for (let move of topMoves) {
+            board[`${move.x},${move.y}`] = "O";
+            // Gọi Minimax với alpha-beta
+            let score = minimax(AI_DEPTH - 1, -Infinity, Infinity, false);
+            delete board[`${move.x},${move.y}`];
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        }
+        if (bestMove) makeMove(bestMove.x, bestMove.y, "O");
+    }
+    function checkUrgentMove() {
+        const moves = generateMoves();
+        // Kiểm tra thắng ngay
+        for (let m of moves) {
+            board[`${m.x},${m.y}`] = "O";
+            if (checkWin(m.x, m.y, "O")) { delete board[`${m.x},${m.y}`]; return m; } // Win
+            delete board[`${m.x},${m.y}`];
+        }
+        // Kiểm tra chặn thua
+        for (let m of moves) {
+            board[`${m.x},${m.y}`] = "X";
+            if (checkWin(m.x, m.y, "X")) { delete board[`${m.x},${m.y}`]; return m; } // Block Lose
+            delete board[`${m.x},${m.y}`];
+        }
+        // Cải thiện: Kiểm tra double threat (nếu đối thủ có 2 live 3, chặn một trong số)
+        for (let m of moves) {
+            board[`${m.x},${m.y}`] = "O";
+            let threatReduced = evaluateBoard("X") < evaluateBoard("X") - LIVE_3 * 2;
+            delete board[`${m.x},${m.y}`];
+            if (threatReduced) return m;
+        }
+        return null;
+    }
+    function minimax(depth, alpha, beta, isMaximizing) {
+        if (depth === 0) return evaluateBoard();
+        const moves = generateMoves();
+       
+        // Sorting Heuristic trong đệ quy (Cải thiện: Ưu tiên gần lastMove và heuristic cao)
+        if (moves.length > 1) {
+             moves.sort((a, b) => {
+                 let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
+                 let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
+                 let heurA = evaluateMove(a.x, a.y, isMaximizing ? "O" : "X");
+                 let heurB = evaluateMove(b.x, b.y, isMaximizing ? "O" : "X");
+                 return (distB + heurB) - (distA + heurA);
+             });
+        }
+       
+        // Càng xuống sâu càng cắt giảm nhánh (Tăng limit nhẹ để chính xác hơn)
+        let limit = Math.max(4, 6 + depth);
+        const searchMoves = moves.slice(0, limit);
+        if (isMaximizing) {
+            let maxEval = -Infinity;
+            for (let move of searchMoves) {
+                board[`${move.x},${move.y}`] = "O";
+                if (checkWin(move.x, move.y, "O")) { delete board[`${move.x},${move.y}`]; return WIN_SCORE; }
+               
+                let eval = minimax(depth - 1, alpha, beta, false);
+                delete board[`${move.x},${move.y}`];
+               
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (let move of searchMoves) {
+                board[`${move.x},${move.y}`] = "X";
+                if (checkWin(move.x, move.y, "X")) { delete board[`${move.x},${move.y}`]; return -WIN_SCORE; }
+               
+                let eval = minimax(depth - 1, alpha, beta, true);
+                delete board[`${move.x},${move.y}`];
+               
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
+                if (beta <= alpha) break;
+            }
+            return minEval;
+        }
+    }
+    function evaluateBoard() {
+        let score = 0;
+        for (let key in board) {
+            let [x, y] = key.split(',').map(Number);
+            let p = board[key];
+            let pointScore = evaluatePoint(x, y, p);
+            if (p === "O") score += pointScore;
+            else score -= pointScore * 1.2; // Tăng hệ số defense để AI phòng thủ tốt hơn
+        }
+        return score;
+    }
+    function evaluateMove(x, y, p) {
+        board[`${x},${y}`] = p;
+        let score = evaluateBoard();
+        delete board[`${x},${y}`];
+        return score;
+    }
+    function evaluatePoint(x, y, p) {
+        let total = 0;
+        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+        for (let [dx, dy] of dirs) {
+            let line = getLineStr(x, y, dx, dy, p);
+            total += matchPattern(line, p);
+        }
+        return total;
+    }
+    function getLineStr(x, y, dx, dy, p) {
+        let s = "";
+        // Mở rộng range lên 5 để detect overline hoặc longer chains
+        for (let i = -5; i <= 5; i++) {
+            let val = board[`${x + dx*i},${y + dy*i}`];
+            if (val === p) s += "M";
+            else if (val === undefined) s += "_";
+            else s += "E";
+        }
+        return s;
+    }
+    function matchPattern(s, p) {
+        let score = 0;
+        // Cải thiện patterns: Thêm dead_2, và xử lý blocked tốt hơn
+        if (s.includes("MMMMM")) return WIN_SCORE;
+        // Live 4: Mở cả hai đầu
+        if (s.includes("_MMMM_")) score += LIVE_4;
+        // Dead 4: Mở một đầu hoặc có gap nhưng blocked
+        if (s.includes("EMMMM_") || s.includes("_MMME") || s.includes("MMM_M") || s.includes("MM_MM") || s.includes("M_MMM")) score += DEAD_4;
+        // Live 3: Mở hai đầu
+        if (s.includes("_MMM_") || s.includes("_MM_M_") || s.includes("_M_MM_")) score += LIVE_3;
+        // Dead 3: Mở một đầu
+        if (s.includes("EMMM_") || s.includes("_MMME") || s.includes("MM_M_") || s.includes("_M_MM")) score += DEAD_3;
+        // Live 2: Mở hai đầu
+        if (s.includes("_MM_") || s.includes("_M_M_")) score += LIVE_2;
+        // Dead 2: Mở một đầu
+        if (s.includes("EMM_") || s.includes("_MME") || s.includes("M_M_") || s.includes("_M_M")) score += DEAD_2;
+        // Bonus nếu chặn đối thủ (nếu p là AI, kiểm tra nếu line có E nhiều)
+        if (s.split('E').length - 1 > 1) score += BLOCK_BONUS;
+        return score;
+    }
+    function generateMoves() {
+        let moves = new Set();
+        // Mở rộng bán kính generate moves lên 3 để bao quát threat xa hơn
+        let startX = minX - 3; let endX = maxX + 3;
+        let startY = minY - 3; let endY = maxY + 3;
+        for (let key in board) {
+            let [x, y] = key.split(',').map(Number);
+            for (let i = -2; i <= 2; i++) { // Tăng range neighbor
+                for (let j = -2; j <= 2; j++) {
+                    if (i===0 && j===0) continue;
+                    let nx = x+i, ny = y+j;
+                    if (!board[`${nx},${ny}`]) {
+                        moves.add(`${nx},${ny}`);
+                    }
+                }
+            }
+        }
+        return Array.from(moves).map(k => {
+            let [x, y] = k.split(',').map(Number);
+            return {x, y};
+        });
+    }
+    function checkWin(x, y, p) {
+        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+        for (let [dx, dy] of dirs) {
+            let count = 1;
+            let i = 1; while (board[`${x + dx*i},${y + dy*i}`] === p) { count++; i++; }
+            i = 1; while (board[`${x - dx*i},${y - dy*i}`] === p) { count++; i++; }
+            if (count >= 5) return true;
+        }
+        return false;
+    }
+    // --- RENDER ---
+    function render() {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+       
+        const currentCell = CELL_SIZE * camera.zoom;
+        const offX = (canvas.width/2 + camera.x) % currentCell;
+        const offY = (canvas.height/2 + camera.y) % currentCell;
+        // Grid (Darker)
+        ctx.beginPath(); ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+        for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
+        for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+        ctx.stroke();
+        if (lastMove) {
+            const lx = lastMove.x * currentCell + canvas.width/2 + camera.x;
+            const ly = lastMove.y * currentCell + canvas.height/2 + camera.y;
+            ctx.fillStyle = "rgba(255, 50, 50, 0.2)";
+            ctx.fillRect(lx, ly, currentCell, currentCell);
+            ctx.strokeStyle = "#ff3838"; ctx.lineWidth = 2;
+            ctx.strokeRect(lx, ly, currentCell, currentCell);
+        }
+        for (let key in board) {
+            const [bx, by] = key.split(',').map(Number);
+            const pX = bx * currentCell + canvas.width/2 + camera.x;
+            const pY = by * currentCell + canvas.height/2 + camera.y;
+            if (pX > -currentCell && pX < canvas.width && pY > -currentCell && pY < canvas.height) {
+                drawPiece(pX, pY, board[key], currentCell);
+            }
+        }
+    }
+    function drawPiece(x, y, type, size) {
+        const p = size * 0.2;
+        ctx.lineWidth = size * 0.12;
+        ctx.lineCap = "round";
+       
+        if (type === "X") {
+            ctx.strokeStyle = "#fff";
+            ctx.shadowColor = "#fff"; ctx.shadowBlur = 5;
+            ctx.beginPath();
+            ctx.moveTo(x+p, y+p); ctx.lineTo(x+size-p, y+size-p);
+            ctx.moveTo(x+size-p, y+p); ctx.lineTo(x+p, y+size-p);
+            ctx.stroke();
+        } else {
+            ctx.strokeStyle = "#ff3838";
+            ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(x+size/2, y+size/2, size/2-p, 0, Math.PI*2);
+            ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+    }
+    initGame();
+</script>
+</body>
+</html>
