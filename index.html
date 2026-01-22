@@ -2,42 +2,48 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Caro AI - Extreme Edition</title>
+    <title>Caro AI - Extreme Edition (Optimized)</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #121212; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        canvas { display: block; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #0f172a; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; cursor: crosshair; }
         #ui {
             position: absolute; top: 20px; left: 20px;
-            background: rgba(255, 255, 255, 0.98);
-            padding: 22px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-            pointer-events: none; width: 260px; border-left: 5px solid #e74c3c;
+            background: rgba(30, 41, 59, 0.95);
+            padding: 20px; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            pointer-events: none; width: 280px;
+            border: 1px solid #334155;
+            color: #e2e8f0;
+            backdrop-filter: blur(5px);
         }
-        h2 { margin: 0 0 5px 0; font-size: 1.4rem; color: #1a1a1a; }
-        .difficulty { font-size: 0.7rem; color: #e74c3c; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-        #status { margin-top: 15px; font-size: 1rem; color: #333; }
-        .turn-x { color: #e74c3c; font-weight: bold; }
-        .turn-o { color: #3498db; font-weight: bold; }
-        .info { font-size: 0.85rem; color: #666; line-height: 1.6; margin-top: 15px; }
+        h2 { margin: 0 0 10px 0; font-size: 1.5rem; color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+        .difficulty { font-size: 0.75rem; color: #f43f5e; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
+        #status { margin-top: 15px; font-size: 1.1rem; font-weight: 600; }
+        .turn-x { color: #f43f5e; } /* Đỏ hồng */
+        .turn-o { color: #38bdf8; } /* Xanh dương sáng */
+        .info { font-size: 0.85rem; color: #94a3b8; line-height: 1.5; margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px; }
         #reset { 
             margin-top: 20px; pointer-events: auto; cursor: pointer;
-            background: #1a1a1a; color: white; border: none; padding: 12px; 
-            border-radius: 8px; width: 100%; font-weight: bold; transition: 0.2s;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white; border: none; padding: 12px; 
+            border-radius: 6px; width: 100%; font-weight: bold; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2); transition: 0.2s;
         }
-        #reset:hover { background: #333; transform: translateY(-2px); }
+        #reset:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(37, 99, 235, 0.4); }
+        #reset:active { transform: translateY(0); }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div class="difficulty">Master Mode (Alpha-Beta)</div>
-    <h2>Caro Ultra AI</h2>
+    <div class="difficulty">Extreme Mode (Depth 4+)</div>
+    <h2>Caro AI God-Tier</h2>
     <div id="status">Lượt của: <span class="turn-x">Bạn (X)</span></div>
     
     <div class="info">
-        • <b>Trạng thái:</b> Đang bật tính toán sâu<br>
-        • <b>AI:</b> Sẽ ưu tiên chặn nước đôi<br>
-        • <b>Kéo:</b> Chuột phải hoặc giữ để di chuyển<br>
-        • <b>Cuộn:</b> Phóng to/Thu nhỏ
+        • <b>Thuật toán:</b> Minimax + Alpha-Beta + Move Sorting<br>
+        • <b>Chiến thuật:</b> Tấn công dồn dập & Bẫy nước đôi<br>
+        • <b>Điều khiển:</b> Kéo chuột phải để di chuyển map<br>
     </div>
     <button id="reset" onclick="resetGame()">VÁN MỚI</button>
 </div>
@@ -50,7 +56,7 @@
     const statusEl = document.getElementById('status');
 
     let board = {}; 
-    let turn = "X";
+    let turn = "X"; // Người chơi đi trước
     let gameOver = false;
     let lastMove = null; 
     let camera = { x: 0, y: 0, zoom: 1 };
@@ -58,8 +64,20 @@
     let lastMousePos = { x: 0, y: 0 };
     const cellSize = 40;
     
-    // ĐỘ KHÓ: 3 là cân bằng, 4 là rất khó (có thể gây lag nhẹ khi bắt đầu ván)
-    const AI_DEPTH = 3; 
+    // CẤU HÌNH AI
+    const AI_DEPTH = 4; // Độ sâu tính toán (4 là rất mạnh với JS)
+    const MAX_WIDTH = 20; // Giới hạn phạm vi tìm kiếm cục bộ để tối ưu tốc độ
+
+    // Bảng điểm đánh giá thế cờ (Score Table)
+    const SCORE = {
+        WIN: 100000000,
+        OPEN_4: 10000000,   // OOOO_
+        BLOCKED_4: 1000000, // OOOOX
+        OPEN_3: 100000,     // _OOO_
+        BLOCKED_3: 1000,    // _OOOX
+        OPEN_2: 100,
+        BLOCKED_2: 10
+    };
 
     function init() {
         window.addEventListener('resize', resize);
@@ -79,8 +97,9 @@
         canvas.addEventListener('wheel', (e) => {
             const zoomSpeed = 0.1;
             camera.zoom *= (e.deltaY > 0 ? (1 - zoomSpeed) : (1 + zoomSpeed));
-            camera.zoom = Math.min(Math.max(camera.zoom, 0.3), 2.5);
+            camera.zoom = Math.min(Math.max(camera.zoom, 0.4), 2.0);
         });
+        canvas.addEventListener('contextmenu', e => e.preventDefault()); // Chặn menu chuột phải
         canvas.addEventListener('click', handleClick);
         render();
     }
@@ -99,8 +118,9 @@
         if (!board[`${pos.x},${pos.y}`]) {
             makeMove(pos.x, pos.y, "X");
             if (!gameOver) {
-                statusEl.innerHTML = `AI đang tính toán...`;
-                setTimeout(aiMove, 100); 
+                statusEl.innerHTML = `AI đang suy nghĩ...`;
+                // Sử dụng setTimeout để UI kịp cập nhật trước khi AI chiếm thread
+                setTimeout(aiMove, 20); 
             }
         }
     }
@@ -108,8 +128,9 @@
     function makeMove(x, y, p) {
         board[`${x},${y}`] = p;
         lastMove = { x, y };
+        // Chỉ check thắng thua cục bộ tại điểm vừa đánh để nhanh hơn
         if (checkWin(x, y, p)) {
-            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>BẠN THẮNG!</span>" : "<span class='turn-o'>MÁY THẮNG!</span>";
+            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>BẠN ĐÃ THẮNG!</span>" : "<span class='turn-o'>AI ĐÃ THẮNG!</span>";
             gameOver = true;
         } else {
             turn = p === "X" ? "O" : "X";
@@ -117,156 +138,262 @@
         }
     }
 
+    // --- AI LOGIC CORE ---
+
     function aiMove() {
         if (gameOver) return;
-        let bestScore = -Infinity;
-        let move = null;
-        let candidates = getCandidates();
 
+        // 1. Kiểm tra các nước thắng ngay lập tức hoặc buộc phải đỡ (Chiến thuật tham lam)
+        const criticalMove = findCriticalMove();
+        if (criticalMove) {
+            makeMove(criticalMove.x, criticalMove.y, "O");
+            return;
+        }
+
+        // 2. Nếu không có nước khẩn cấp, chạy Minimax
+        let candidates = getCandidates(1); // Lấy các ô trống xung quanh ô có đánh (bán kính 1)
+        
+        // Nếu bàn cờ trống, đánh vào tâm (0,0)
         if (candidates.length === 0) {
             makeMove(0, 0, "O");
             return;
         }
 
-        // Ưu tiên nước đi thắng ngay lập tức
-        for (let cand of candidates) {
-            if (checkWin(cand.x, cand.y, "O")) {
-                makeMove(cand.x, cand.y, "O");
-                return;
-            }
-        }
+        let bestScore = -Infinity;
+        let bestMove = candidates[0];
+        let alpha = -Infinity;
+        let beta = Infinity;
 
-        // Thuật toán Minimax với Alpha-Beta Pruning
-        for (let cand of candidates) {
-            board[`${cand.x},${cand.y}`] = "O";
-            let score = minimax(AI_DEPTH - 1, -Infinity, Infinity, false);
-            delete board[`${cand.x},${cand.y}`];
+        // Duyệt qua các nước đi tiềm năng
+        for (let move of candidates) {
+            board[`${move.x},${move.y}`] = "O";
+            // Gọi minimax
+            let score = minimax(AI_DEPTH - 1, alpha, beta, false);
+            delete board[`${move.x},${move.y}`];
+
             if (score > bestScore) {
                 bestScore = score;
-                move = cand;
+                bestMove = move;
             }
+            alpha = Math.max(alpha, score);
+            // Không break ở đây vì đây là root node, cần tìm move tốt nhất
         }
-        if (move) makeMove(move.x, move.y, "O");
+
+        makeMove(bestMove.x, bestMove.y, "O");
+    }
+
+    // Tìm các nước đi "Bắt buộc": Thắng ngay hoặc Chặn thua ngay
+    function findCriticalMove() {
+        let candidates = getCandidates(2); // Quét rộng hơn một chút cho các nước đe dọa
+        
+        // Check: AI có thể thắng ngay không?
+        for (let m of candidates) {
+            board[`${m.x},${m.y}`] = "O";
+            if (checkWin(m.x, m.y, "O")) {
+                delete board[`${m.x},${m.y}`];
+                return m;
+            }
+            delete board[`${m.x},${m.y}`];
+        }
+
+        // Check: Người chơi có thể thắng ngay không? (Phải chặn)
+        for (let m of candidates) {
+            board[`${m.x},${m.y}`] = "X";
+            if (checkWin(m.x, m.y, "X")) {
+                delete board[`${m.x},${m.y}`];
+                return m;
+            }
+            delete board[`${m.x},${m.y}`];
+        }
+        return null;
     }
 
     function minimax(depth, alpha, beta, isMaximizing) {
         if (depth === 0) return evaluateBoard();
 
-        let candidates = getCandidates();
-        if (isMaximizing) {
+        let candidates = getCandidates(1);
+        
+        // Nếu không còn nước đi
+        if (candidates.length === 0) return evaluateBoard();
+
+        if (isMaximizing) { // Lượt AI (O)
             let maxEval = -Infinity;
-            for (let cand of candidates) {
-                board[`${cand.x},${cand.y}`] = "O";
-                let ev = minimax(depth - 1, alpha, beta, false);
-                delete board[`${cand.x},${cand.y}`];
-                maxEval = Math.max(maxEval, ev);
-                alpha = Math.max(alpha, ev);
+            for (let move of candidates) {
+                board[`${move.x},${move.y}`] = "O";
+                // Kiểm tra thắng sớm để cắt tỉa
+                if (checkWin(move.x, move.y, "O")) {
+                    delete board[`${move.x},${move.y}`];
+                    return SCORE.WIN; 
+                }
+                
+                let eval = minimax(depth - 1, alpha, beta, false);
+                delete board[`${move.x},${move.y}`];
+                
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
                 if (beta <= alpha) break;
             }
             return maxEval;
-        } else {
+        } else { // Lượt Người (X)
             let minEval = Infinity;
-            for (let cand of candidates) {
-                board[`${cand.x},${cand.y}`] = "X";
-                let ev = minimax(depth - 1, alpha, beta, true);
-                delete board[`${cand.x},${cand.y}`];
-                minEval = Math.min(minEval, ev);
-                beta = Math.min(beta, ev);
+            for (let move of candidates) {
+                board[`${move.x},${move.y}`] = "X";
+                 // Kiểm tra thắng sớm
+                if (checkWin(move.x, move.y, "X")) {
+                    delete board[`${move.x},${move.y}`];
+                    return -SCORE.WIN; 
+                }
+
+                let eval = minimax(depth - 1, alpha, beta, true);
+                delete board[`${move.x},${move.y}`];
+                
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
                 if (beta <= alpha) break;
             }
             return minEval;
         }
     }
 
-    function getCandidates() {
-        let coords = new Set();
-        let range = 1; // Chỉ xét ô trống xung quanh quân đã đánh 1 ô để tối ưu
+    // Lấy danh sách các ô trống xung quanh các quân đã đánh
+    // Có Sắp xếp (Ordering) để Alpha-Beta hiệu quả hơn
+    function getCandidates(range = 1) {
+        let uniqueKeys = new Set();
+        let candidates = [];
+        
+        // Chỉ xét các ô gần quân đã đánh
         for (let key in board) {
-            let [x, y] = key.split(',').map(Number);
-            for (let i = -range; i <= range; i++) {
-                for (let j = -range; j <= range; j++) {
-                    let k = `${x + i},${y + j}`;
-                    if (!board[k]) coords.add(k);
+            let [cx, cy] = key.split(',').map(Number);
+            for (let dx = -range; dx <= range; dx++) {
+                for (let dy = -range; dy <= range; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    let nx = cx + dx, ny = cy + dy;
+                    let nKey = `${nx},${ny}`;
+                    if (!board[nKey] && !uniqueKeys.has(nKey)) {
+                        uniqueKeys.add(nKey);
+                        candidates.push({x: nx, y: ny});
+                    }
                 }
             }
         }
-        return Array.from(coords).map(k => {
-            let [x, y] = k.split(',').map(Number);
-            return { x, y };
-        });
+
+        // Heuristic Sắp xếp: Ưu tiên ô gần trung tâm hoặc gần lastMove
+        // Điều này giúp thuật toán tìm ra nhánh tốt sớm hơn -> Cắt tỉa nhiều hơn -> Nhanh hơn
+        if (lastMove) {
+            candidates.sort((a, b) => {
+                let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
+                let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
+                return distA - distB;
+            });
+        }
+        
+        // Giới hạn số lượng candidate để tránh bùng nổ tổ hợp nếu bàn cờ quá đông
+        // Chỉ lấy Top 20-30 nước khả dĩ nhất nếu ở độ sâu lớn
+        if (candidates.length > 25) return candidates.slice(0, 25);
+        return candidates;
     }
 
+    // Hàm đánh giá thế cờ: Đây là "Bộ não" quyết định độ khôn
     function evaluateBoard() {
-        let score = 0;
-        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+        let totalScore = 0;
+        // Duyệt qua tất cả các chuỗi trên bàn cờ
+        // Lưu ý: Để tối ưu tốc độ, ta có thể chỉ tính điểm các ô vừa thay đổi, 
+        // nhưng ở đây ta tính toàn bộ để code đơn giản và chính xác hơn.
         
+        let checked = new Set();
+        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
+
         for (let key in board) {
             let [x, y] = key.split(',').map(Number);
             let p = board[key];
-            let cellScore = 0;
-
+            
             for (let [dx, dy] of dirs) {
-                let {c, b1, b2} = countDetailed(x, y, dx, dy, p);
-                
-                if (c >= 5) cellScore += 1000000;
-                else if (c === 4) {
-                    if (!b1 && !b2) cellScore += 50000; // 4 hở 2 đầu
-                    else if (!b1 || !b2) cellScore += 5000; // 4 bị chặn 1 đầu
-                }
-                else if (c === 3) {
-                    if (!b1 && !b2) cellScore += 3000; // 3 hở 2 đầu
-                    else if (!b1 || !b2) cellScore += 500;
-                }
-                else if (c === 2) {
-                    if (!b1 && !b2) cellScore += 200;
-                }
-            }
-            // AI (O) cộng điểm, Người (X) trừ điểm (và ưu tiên chặn X hơn)
-            score += (p === "O" ? cellScore : -cellScore * 1.5);
-        }
-        return score;
-    }
+                // Chỉ duyệt theo hướng dương để tránh trùng lặp
+                // Nếu ô trước đó cùng loại thì đã tính rồi, bỏ qua
+                let prevKey = `${x-dx},${y-dy}`;
+                if (board[prevKey] === p) continue;
 
-    function countDetailed(x, y, dx, dy, p) {
-        let c = 1, nx = x + dx, ny = y + dy;
-        while (board[`${nx},${ny}`] === p) { c++; nx += dx; ny += dy; }
-        let b1 = board[`${nx},${ny}`] !== undefined && board[`${nx},${ny}`] !== p;
-        
-        nx = x - dx; ny = y - dy;
-        while (board[`${nx},${ny}`] === p) { c++; nx -= dx; ny -= dy; }
-        let b2 = board[`${nx},${ny}`] !== undefined && board[`${nx},${ny}`] !== p;
-        
-        return {c, b1, b2};
+                let count = 0;
+                let blockedStart = false;
+                let blockedEnd = false;
+                
+                // Kiểm tra chặn đầu
+                if (board[prevKey] !== undefined) blockedStart = true; // Bị chặn bởi địch hoặc hết biên (coi như địch)
+
+                let tx = x, ty = y;
+                while(board[`${tx},${ty}`] === p) {
+                    count++;
+                    tx += dx; ty += dy;
+                }
+                
+                // Kiểm tra chặn đuôi
+                let nextKey = `${tx},${ty}`;
+                if (board[nextKey] !== undefined) blockedEnd = true;
+
+                let currentScore = 0;
+                
+                // Tính điểm dựa trên bảng SCORE
+                if (count >= 5) currentScore = SCORE.WIN;
+                else if (count === 4) {
+                    if (!blockedStart && !blockedEnd) currentScore = SCORE.OPEN_4;
+                    else if (!blockedStart || !blockedEnd) currentScore = SCORE.BLOCKED_4;
+                } else if (count === 3) {
+                    if (!blockedStart && !blockedEnd) currentScore = SCORE.OPEN_3;
+                    else if (!blockedStart || !blockedEnd) currentScore = SCORE.BLOCKED_3;
+                } else if (count === 2) {
+                    if (!blockedStart && !blockedEnd) currentScore = SCORE.OPEN_2;
+                    else if (!blockedStart || !blockedEnd) currentScore = SCORE.BLOCKED_2;
+                }
+
+                // AI (O) muốn Max điểm, Người (X) muốn Min điểm (với AI)
+                // Hệ số 1.2 cho quân X để AI ưu tiên phòng thủ hơn một chút nếu thế cờ ngang bằng
+                if (p === "O") totalScore += currentScore;
+                else totalScore -= currentScore * 1.2; 
+            }
+        }
+        return totalScore;
     }
 
     function checkWin(x, y, p) {
         const dirs = [[1,0], [0,1], [1,1], [1,-1]];
         for (let [dx, dy] of dirs) {
-            if (countDetailed(x, y, dx, dy, p).c >= 5) return true;
+            let count = 1;
+            let i = 1;
+            while (board[`${x + i*dx},${y + i*dy}`] === p) { count++; i++; }
+            i = 1;
+            while (board[`${x - i*dx},${y - i*dy}`] === p) { count++; i++; }
+            if (count >= 5) return true;
         }
         return false;
     }
 
+    // --- GRAPHICS ---
     function render() {
-        ctx.fillStyle = "#121212";
+        ctx.fillStyle = "#0f172a";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
         const currentCell = cellSize * camera.zoom;
         const offX = (canvas.width/2 + camera.x) % currentCell;
         const offY = (canvas.height/2 + camera.y) % currentCell;
 
-        // Vẽ lưới
-        ctx.beginPath(); ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+        // Vẽ lưới mờ
+        ctx.beginPath(); ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 1;
         for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
         for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
         ctx.stroke();
 
-        // Highlight nước mới nhất
+        // Highlight nước đi cuối cùng
         if (lastMove) {
             const lx = lastMove.x * currentCell + canvas.width/2 + camera.x;
             const ly = lastMove.y * currentCell + canvas.height/2 + camera.y;
-            ctx.fillStyle = "rgba(231, 76, 60, 0.2)";
-            ctx.fillRect(lx, ly, currentCell, currentCell);
-            ctx.strokeStyle = "#e74c3c";
+            // Hiệu ứng phát sáng
+            const grd = ctx.createRadialGradient(lx+currentCell/2, ly+currentCell/2, 5, lx+currentCell/2, ly+currentCell/2, currentCell);
+            grd.addColorStop(0, "rgba(255, 255, 255, 0.3)");
+            grd.addColorStop(1, "rgba(255, 255, 255, 0)");
+            ctx.fillStyle = grd;
+            ctx.fillRect(lx - currentCell/2, ly - currentCell/2, currentCell*2, currentCell*2);
+            
+            ctx.strokeStyle = "#fbbf24"; // Vàng kim
             ctx.lineWidth = 2;
             ctx.strokeRect(lx, ly, currentCell, currentCell);
         }
@@ -276,7 +403,9 @@
             const [bx, by] = key.split(',').map(Number);
             const pX = bx * currentCell + canvas.width/2 + camera.x;
             const pY = by * currentCell + canvas.height/2 + camera.y;
-            if (pX + currentCell > 0 && pX < canvas.width && pY + currentCell > 0 && pY < canvas.height) {
+            
+            // Chỉ vẽ những quân trong màn hình
+            if (pX + currentCell > -50 && pX < canvas.width + 50 && pY + currentCell > -50 && pY < canvas.height + 50) {
                 drawPiece(pX, pY, board[key], currentCell);
             }
         }
@@ -284,18 +413,27 @@
     }
 
     function drawPiece(x, y, type, size) {
-        ctx.lineWidth = size * 0.15;
+        ctx.lineWidth = size * 0.12;
         ctx.lineCap = "round";
         const p = size * 0.25;
-        ctx.strokeStyle = type === "X" ? "#ff5e57" : "#48dbfb";
-        ctx.beginPath();
+        
+        ctx.shadowBlur = 10;
+        
         if (type === "X") {
+            ctx.strokeStyle = "#f43f5e"; // Rose 500
+            ctx.shadowColor = "#f43f5e";
+            ctx.beginPath();
             ctx.moveTo(x+p, y+p); ctx.lineTo(x+size-p, y+size-p);
             ctx.moveTo(x+size-p, y+p); ctx.lineTo(x+p, y+size-p);
+            ctx.stroke();
         } else {
+            ctx.strokeStyle = "#38bdf8"; // Sky 400
+            ctx.shadowColor = "#38bdf8";
+            ctx.beginPath();
             ctx.arc(x+size/2, y+size/2, size/2-p, 0, Math.PI*2);
+            ctx.stroke();
         }
-        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset shadow
     }
 
     function resetGame() {
