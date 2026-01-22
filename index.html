@@ -2,61 +2,66 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Caro GOD MODE - AI Đi Trước</title>
+    <title>Caro GOD MODE - ULTIMATE</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #0f0f0f; font-family: 'Segoe UI', monospace; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', monospace; }
         canvas { display: block; }
         #ui {
             position: absolute; top: 20px; left: 20px;
-            background: rgba(20, 20, 20, 0.95); color: #fff;
+            background: rgba(10, 10, 10, 0.95); color: #fff;
             padding: 25px; border-radius: 8px; 
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-            border: 1px solid #333; width: 280px;
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.3);
+            border: 1px solid #555; width: 280px;
             pointer-events: none;
         }
-        h2 { margin: 0 0 15px 0; font-size: 1.5rem; color: #00d2d3; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px #00d2d3; }
-        .info { font-size: 0.9rem; color: #aaa; line-height: 1.6; margin-bottom: 20px; }
-        .turn-x { color: #ff4757; font-weight: bold; }
-        .turn-o { color: #00d2d3; font-weight: bold; }
+        h2 { margin: 0 0 15px 0; font-size: 1.5rem; color: #ff3838; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px #ff3838; }
+        .info { font-size: 0.9rem; color: #ccc; line-height: 1.6; margin-bottom: 20px; }
+        .turn-x { color: #fff; font-weight: bold; }
+        .turn-o { color: #ff3838; font-weight: bold; }
         #reset { 
             pointer-events: auto; cursor: pointer;
-            background: transparent; color: #00d2d3; border: 1px solid #00d2d3; 
+            background: transparent; color: #ff3838; border: 1px solid #ff3838; 
             padding: 12px; border-radius: 4px; width: 100%; font-weight: bold; 
             text-transform: uppercase; transition: 0.3s;
         }
-        #reset:hover { background: #00d2d3; color: #000; box-shadow: 0 0 15px #00d2d3; }
+        #reset:hover { background: #ff3838; color: #fff; box-shadow: 0 0 20px #ff3838; }
         
-        /* Hiệu ứng loading khi AI nghĩ */
         #thinking-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.3); z-index: 100;
-            display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.5); z-index: 100;
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
             pointer-events: none;
         }
         .loader {
-            border: 5px solid #333; border-top: 5px solid #00d2d3;
-            border-radius: 50%; width: 50px; height: 50px;
-            animation: spin 1s linear infinite;
+            border: 4px solid #333; border-top: 4px solid #ff3838;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 0.8s linear infinite; margin-bottom: 15px;
         }
+        .loading-text { color: #ff3838; font-weight: bold; letter-spacing: 1px; animation: pulse 1s infinite;}
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <h2>GOD MODE: ON</h2>
+    <h2>GOD MODE: MAX</h2>
     <div id="status">Đang khởi tạo...</div>
     <div class="info">
-        • AI: <span class="turn-o">Màu Xanh (O)</span><br>
-        • Bạn: <span class="turn-x">Màu Đỏ (X)</span><br>
-        • Chế độ: <b>Bất Bại (AI đi trước)</b><br>
-        • Máy chiếm tiên cơ (đánh tâm).<br>
-        • Tỷ lệ bạn thắng: < 1%.
+        • AI: <span class="turn-o">Quái vật (O)</span><br>
+        • Bạn: <span class="turn-x">Người chơi (X)</span><br>
+        • Độ sâu: <b>Depth 5 (Cực khó)</b><br>
+        • AI luôn đi trước và đánh vào tâm.<br>
+        • Cảnh báo: Máy sẽ suy nghĩ lâu để tìm nước đi "chí mạng".
     </div>
-    <button id="reset" onclick="initGame()">Ván Mới</button>
+    <button id="reset" onclick="initGame()">Thử lại</button>
 </div>
 
-<div id="thinking-overlay"><div class="loader"></div></div>
+<div id="thinking-overlay">
+    <div class="loader"></div>
+    <div class="loading-text">AI ĐANG TÍNH TOÁN (DEPTH 5)...</div>
+</div>
 <canvas id="game"></canvas>
 
 <script>
@@ -67,27 +72,27 @@
 
     // --- CẤU HÌNH GAME ---
     const CELL_SIZE = 45;
-    let board = {}; // Sparse matrix: key="x,y", value="X" or "O"
-    let turn = "O"; // Máy luôn là O và luôn đi trước
+    let board = {}; 
+    let turn = "O"; 
     let gameOver = false;
     let lastMove = null;
     let camera = { x: 0, y: 0, zoom: 1 };
     
-    // Giới hạn vùng tìm kiếm để AI không tính toán vô tận
     let minX = 0, maxX = 0, minY = 0, maxY = 0; 
     let moveCount = 0;
 
-    // --- CẤU HÌNH AI ---
-    const AI_DEPTH = 4; // Độ sâu
-    // Điểm số cho các thế cờ
-    const WIN_SCORE = 100000000;
-    const LIVE_4 = 1000000;
-    const DEAD_4 = 10000;
-    const LIVE_3 = 8000;
-    const DEAD_3 = 50;
-    const LIVE_2 = 10;
+    // --- CẤU HÌNH AI (HARDCORE) ---
+    // Cảnh báo: Tăng lên 6 có thể gây crash trình duyệt trên điện thoại
+    const AI_DEPTH = 5; 
+    
+    // Heuristic Scores (Tăng trọng số tấn công)
+    const WIN_SCORE = 1000000000; // Thắng tuyệt đối
+    const LIVE_4 = 2000000;
+    const DEAD_4 = 150000; // Chặn 4 quan trọng hơn rất nhiều
+    const LIVE_3 = 100000;
+    const DEAD_3 = 800;
+    const LIVE_2 = 150;
 
-    // Khởi tạo
     let isDragging = false;
     let lastMousePos = {x:0, y:0};
 
@@ -99,13 +104,11 @@
         camera = { x: 0, y: 0, zoom: 1 };
         minX = 0; maxX = 0; minY = 0; maxY = 0;
         
-        // --- THAY ĐỔI Ở ĐÂY: BỎ RANDOM, LUÔN CHỌN O ---
         turn = "O"; 
         
         statusEl.innerHTML = `Lượt: <span class="turn-o">AI (O) ĐI TRƯỚC</span>`;
         
-        // AI đi trước đánh luôn vào tọa độ 0,0 (Tâm thiên hà)
-        // Đây là nước đi mạnh nhất trong cờ Caro
+        // AI đi trước đánh luôn vào tâm
         setTimeout(() => {
             makeMove(0, 0, "O");
         }, 500);
@@ -113,7 +116,7 @@
         render();
     }
 
-    // --- XỬ LÝ SỰ KIỆN ---
+    // --- EVENTS ---
     window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
     window.dispatchEvent(new Event('resize'));
 
@@ -141,12 +144,12 @@
         if (!board[`${pos.x},${pos.y}`]) {
             makeMove(pos.x, pos.y, "X");
             if (!gameOver) {
-                overlay.style.display = "flex"; // Hiện loading
-                // setTimeout để UI kịp render trước khi thread bị block bởi AI
+                overlay.style.display = "flex"; 
+                // Delay nhỏ để trình duyệt kịp vẽ nước đi của bạn trước khi bị treo để tính toán
                 setTimeout(() => {
                     aiTurn();
                     overlay.style.display = "none";
-                }, 100);
+                }, 50);
             }
         }
     });
@@ -164,7 +167,7 @@
         updateBounds(x, y);
 
         if (checkWin(x, y, p)) {
-            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>BẠN THẮNG? KHÔNG THỂ NÀO!</span>" : "<span class='turn-o'>AI ĐÃ CHIẾN THẮNG</span>";
+            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>CHIẾN THẮNG (LỖI GAME?)</span>" : "<span class='turn-o'>BẠN ĐÃ THUA</span>";
             gameOver = true;
         } else {
             turn = p === "X" ? "O" : "X";
@@ -183,8 +186,9 @@
         }
     }
 
-    // --- AI LOGIC (MINIMAX + ALPHA BETA) ---
+    // --- AI ENGINE ---
     function aiTurn() {
+        // 1. Check Urgent (Thắng ngay hoặc Chặn thua ngay lập tức) - Depth 1 nhanh
         const urgentMove = checkUrgentMove();
         if (urgentMove) {
             makeMove(urgentMove.x, urgentMove.y, "O");
@@ -196,18 +200,20 @@
         
         const moves = generateMoves();
         
-        // Sort moves heuristic
+        // Sắp xếp nước đi tốt nhất để duyệt trước
         moves.sort((a, b) => {
-            let sA = evaluatePoint(a.x, a.y, "O") + evaluatePoint(a.x, a.y, "X");
-            let sB = evaluatePoint(b.x, b.y, "O") + evaluatePoint(b.x, b.y, "X");
+            let sA = evaluatePoint(a.x, a.y, "O") * 1.5 + evaluatePoint(a.x, a.y, "X");
+            let sB = evaluatePoint(b.x, b.y, "O") * 1.5 + evaluatePoint(b.x, b.y, "X");
             return sB - sA;
         });
 
-        // Lấy top 15 nước tốt nhất
-        const topMoves = moves.slice(0, 15);
+        // Chỉ chọn TOP 8 nước đi tốt nhất để duyệt sâu (Narrow Beam Search)
+        // Nếu duyệt hết thì depth 5 sẽ làm treo trình duyệt
+        const topMoves = moves.slice(0, 8);
 
         for (let move of topMoves) {
             board[`${move.x},${move.y}`] = "O";
+            // Gọi Minimax
             let score = minimax(AI_DEPTH - 1, -Infinity, Infinity, false);
             delete board[`${move.x},${move.y}`];
 
@@ -222,16 +228,14 @@
 
     function checkUrgentMove() {
         const moves = generateMoves();
-        // Ưu tiên 1: Thắng ngay
         for (let m of moves) {
             board[`${m.x},${m.y}`] = "O";
-            if (checkWin(m.x, m.y, "O")) { delete board[`${m.x},${m.y}`]; return m; }
+            if (checkWin(m.x, m.y, "O")) { delete board[`${m.x},${m.y}`]; return m; } // Win
             delete board[`${m.x},${m.y}`];
         }
-        // Ưu tiên 2: Chặn thua ngay
         for (let m of moves) {
             board[`${m.x},${m.y}`] = "X";
-            if (checkWin(m.x, m.y, "X")) { delete board[`${m.x},${m.y}`]; return m; }
+            if (checkWin(m.x, m.y, "X")) { delete board[`${m.x},${m.y}`]; return m; } // Block Lose
             delete board[`${m.x},${m.y}`];
         }
         return null;
@@ -241,22 +245,31 @@
         if (depth === 0) return evaluateBoard();
 
         const moves = generateMoves();
-        if (moves.length > 20) {
+        
+        // Sorting Heuristic trong đệ quy
+        if (moves.length > 1) {
              moves.sort((a, b) => {
-                 return (Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y)) - 
-                        (Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y));
+                 // Ưu tiên nước đi gần lastMove nhất để tạo cục bộ
+                 let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
+                 let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
+                 return distA - distB;
              });
         }
         
-        const searchMoves = moves.slice(0, 10 + depth * 2); 
+        // Càng xuống sâu càng cắt giảm nhánh để giữ tốc độ
+        // Depth 4 -> check 6 moves, Depth 3 -> check 5 moves...
+        let limit = Math.max(3, 4 + depth);
+        const searchMoves = moves.slice(0, limit); 
 
         if (isMaximizing) {
             let maxEval = -Infinity;
             for (let move of searchMoves) {
                 board[`${move.x},${move.y}`] = "O";
                 if (checkWin(move.x, move.y, "O")) { delete board[`${move.x},${move.y}`]; return WIN_SCORE; }
+                
                 let eval = minimax(depth - 1, alpha, beta, false);
                 delete board[`${move.x},${move.y}`];
+                
                 maxEval = Math.max(maxEval, eval);
                 alpha = Math.max(alpha, eval);
                 if (beta <= alpha) break;
@@ -267,8 +280,10 @@
             for (let move of searchMoves) {
                 board[`${move.x},${move.y}`] = "X";
                 if (checkWin(move.x, move.y, "X")) { delete board[`${move.x},${move.y}`]; return -WIN_SCORE; }
+                
                 let eval = minimax(depth - 1, alpha, beta, true);
                 delete board[`${move.x},${move.y}`];
+                
                 minEval = Math.min(minEval, eval);
                 beta = Math.min(beta, eval);
                 if (beta <= alpha) break;
@@ -284,7 +299,7 @@
             let p = board[key];
             let pointScore = evaluatePoint(x, y, p);
             if (p === "O") score += pointScore;
-            else score -= pointScore * 1.2; 
+            else score -= pointScore * 1.1; // Cân bằng tấn công/phòng thủ
         }
         return score;
     }
@@ -357,35 +372,32 @@
 
     // --- RENDER ---
     function render() {
-        ctx.fillStyle = "#0f0f0f";
+        ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         const currentCell = CELL_SIZE * camera.zoom;
         const offX = (canvas.width/2 + camera.x) % currentCell;
         const offY = (canvas.height/2 + camera.y) % currentCell;
 
-        // Grid
+        // Grid (Darker)
         ctx.beginPath(); ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
         for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
         for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
         ctx.stroke();
 
-        // Highlight Last Move
         if (lastMove) {
             const lx = lastMove.x * currentCell + canvas.width/2 + camera.x;
             const ly = lastMove.y * currentCell + canvas.height/2 + camera.y;
-            ctx.fillStyle = "rgba(0, 210, 211, 0.2)";
+            ctx.fillStyle = "rgba(255, 50, 50, 0.2)";
             ctx.fillRect(lx, ly, currentCell, currentCell);
-            ctx.strokeStyle = "#00d2d3"; ctx.lineWidth = 2;
+            ctx.strokeStyle = "#ff3838"; ctx.lineWidth = 2;
             ctx.strokeRect(lx, ly, currentCell, currentCell);
         }
 
-        // Draw Pieces
         for (let key in board) {
             const [bx, by] = key.split(',').map(Number);
             const pX = bx * currentCell + canvas.width/2 + camera.x;
             const pY = by * currentCell + canvas.height/2 + camera.y;
-            
             if (pX > -currentCell && pX < canvas.width && pY > -currentCell && pY < canvas.height) {
                 drawPiece(pX, pY, board[key], currentCell);
             }
@@ -398,20 +410,20 @@
         ctx.lineCap = "round";
         
         if (type === "X") {
-            ctx.strokeStyle = "#ff4757"; 
-            ctx.shadowColor = "#ff4757"; ctx.shadowBlur = 10;
+            ctx.strokeStyle = "#fff"; 
+            ctx.shadowColor = "#fff"; ctx.shadowBlur = 5;
             ctx.beginPath();
             ctx.moveTo(x+p, y+p); ctx.lineTo(x+size-p, y+size-p);
             ctx.moveTo(x+size-p, y+p); ctx.lineTo(x+p, y+size-p);
             ctx.stroke();
         } else {
-            ctx.strokeStyle = "#00d2d3";
-            ctx.shadowColor = "#00d2d3"; ctx.shadowBlur = 10;
+            ctx.strokeStyle = "#ff3838";
+            ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 15;
             ctx.beginPath();
             ctx.arc(x+size/2, y+size/2, size/2-p, 0, Math.PI*2);
             ctx.stroke();
         }
-        ctx.shadowBlur = 0; // Reset
+        ctx.shadowBlur = 0;
     }
 
     initGame();
