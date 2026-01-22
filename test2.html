@@ -125,7 +125,7 @@
         // Độ sâu càng cao càng khó (2-3 là ổn cho trình duyệt)
         for (let cand of candidates) {
             board[`${cand.x},${cand.y}`] = "O";
-            let score = minimax(3, -Infinity, Infinity, false);
+            let score = minimax(4, -Infinity, Infinity, false);
             delete board[`${cand.x},${cand.y}`];
             if (score > bestScore) {
                 bestScore = score;
