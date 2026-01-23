@@ -2,291 +2,368 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Caro GOD MODE - ULTIMATE</title>
+    <title>AI EVOLUTION - TỰ HỌC</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', monospace; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #050505; font-family: 'Consolas', monospace; }
         canvas { display: block; }
         #ui {
             position: absolute; top: 20px; left: 20px;
-            background: rgba(10, 10, 10, 0.95); color: #fff;
-            padding: 25px; border-radius: 8px; 
-            box-shadow: 0 0 25px rgba(255, 0, 0, 0.3);
-            border: 1px solid #555; width: 280px;
-            pointer-events: none;
+            background: rgba(15, 15, 20, 0.95); color: #0f0;
+            padding: 20px; border-radius: 4px; border: 1px solid #333;
+            width: 300px; box-shadow: 0 0 30px rgba(0, 255, 0, 0.1);
         }
-        h2 { margin: 0 0 15px 0; font-size: 1.5rem; color: #ff3838; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 15px #ff3838; }
-        .info { font-size: 0.9rem; color: #ccc; line-height: 1.6; margin-bottom: 20px; }
-        .turn-x { color: #fff; font-weight: bold; }
-        .turn-o { color: #ff3838; font-weight: bold; }
-        #reset { 
-            pointer-events: auto; cursor: pointer;
-            background: transparent; color: #ff3838; border: 1px solid #ff3838; 
-            padding: 12px; border-radius: 4px; width: 100%; font-weight: bold; 
-            text-transform: uppercase; transition: 0.3s;
-        }
-        #reset:hover { background: #ff3838; color: #fff; box-shadow: 0 0 20px #ff3838; }
+        h2 { margin: 0 0 10px 0; color: #0f0; text-transform: uppercase; font-size: 1.2rem; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem; color: #aaa; }
+        .val { color: #fff; font-weight: bold; }
+        .turn-x { color: #ff3333; }
+        .turn-o { color: #0f0; }
         
-        #thinking-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 100;
-            display: none; flex-direction: column;
-            align-items: center; justify-content: center;
-            pointer-events: none;
+        #btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button {
+            flex: 1; padding: 10px; background: #111; color: #0f0; 
+            border: 1px solid #333; cursor: pointer; font-family: inherit;
+            transition: 0.2s;
         }
-        .loader {
-            border: 4px solid #333; border-top: 4px solid #ff3838;
-            border-radius: 50%; width: 60px; height: 60px;
-            animation: spin 0.8s linear infinite; margin-bottom: 15px;
+        button:hover { background: #0f0; color: #000; }
+        button.danger { color: #ff3333; border-color: #552222; }
+        button.danger:hover { background: #ff3333; color: #fff; }
+
+        #brain-log {
+            margin-top: 15px; padding: 10px; background: #000; 
+            border: 1px dashed #333; height: 100px; overflow-y: auto;
+            font-size: 0.75rem; color: #666;
         }
-        .loading-text { color: #ff3838; font-weight: bold; letter-spacing: 1px; animation: pulse 1s infinite;}
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        #brain-log p { margin: 2px 0; }
+        .log-learn { color: #ffcc00; }
+        
+        #thinking {
+            position: fixed; top: 0; left: 0; width: 100%; height: 5px;
+            background: linear-gradient(90deg, transparent, #0f0, transparent);
+            z-index: 999; display: none; animation: scan 1.5s infinite linear;
+        }
+        @keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
     </style>
 </head>
 <body>
 
+<div id="thinking"></div>
 <div id="ui">
-    <h2>GOD MODE: MAX</h2>
-    <div id="status">Đang khởi tạo...</div>
-    <div class="info">
-        • AI: <span class="turn-o">Quái vật (O)</span><br>
-        • Bạn: <span class="turn-x">Người chơi (X)</span><br>
-        • Độ sâu: <b>Depth 5 (Cực khó)</b><br>
-        • AI luôn đi trước và đánh vào tâm.<br>
-        • Cảnh báo: Máy sẽ suy nghĩ lâu để tìm nước đi "chí mạng".
+    <h2>🤖 AI EVOLUTION <span style="font-size:0.7em; float:right">v2.0</span></h2>
+    
+    <div class="stat-row"><span>Trạng thái:</span> <span id="status" class="val">Sẵn sàng</span></div>
+    <div class="stat-row"><span>Kinh nghiệm (XP):</span> <span id="xp-display" class="val">0</span> games</div>
+    <div class="stat-row"><span>Sợ "Nước 3":</span> <span id="fear-3" class="val">100%</span></div>
+    <div class="stat-row"><span>Sợ "Nước 4":</span> <span id="fear-4" class="val">100%</span></div>
+    <div class="stat-row"><span>Độ hung hăng:</span> <span id="aggro" class="val">100%</span></div>
+
+    <div id="brain-log">
+        <p>> System initialized...</p>
+        <p>> Waiting for user data...</p>
     </div>
-    <button id="reset" onclick="initGame()">Thử lại</button>
+
+    <div id="btn-group">
+        <button onclick="resetGame()">Ván Mới</button>
+        <button class="danger" onclick="clearBrain()">Quên Hết</button>
+    </div>
 </div>
 
-<div id="thinking-overlay">
-    <div class="loader"></div>
-    <div class="loading-text">AI ĐANG TÍNH TOÁN (DEPTH 5)...</div>
-</div>
 <canvas id="game"></canvas>
 
 <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
-    const overlay = document.getElementById('thinking-overlay');
+    const logEl = document.getElementById('brain-log');
+    const thinkingBar = document.getElementById('thinking');
 
     // --- CẤU HÌNH GAME ---
-    const CELL_SIZE = 45;
+    const CELL_SIZE = 40;
     let board = {}; 
-    let turn = "O"; 
+    let turn = "X";
     let gameOver = false;
     let lastMove = null;
     let camera = { x: 0, y: 0, zoom: 1 };
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
     
-    let minX = 0, maxX = 0, minY = 0, maxY = 0; 
-    let moveCount = 0;
+    // --- AI BRAIN (TRỌNG SỐ MẶC ĐỊNH) ---
+    // Đây là những giá trị mà AI sẽ tự điều chỉnh qua các ván đấu
+    const DEFAULT_WEIGHTS = {
+        gamesPlayed: 0,
+        win: 0,
+        loss: 0,
+        // Điểm phòng thủ (Sợ hãi)
+        def_live_4: 2000000,
+        def_dead_4: 150000,
+        def_live_3: 100000,
+        def_dead_3: 1000,
+        def_live_2: 200,
+        // Điểm tấn công (Hung hăng)
+        atk_scale: 1.2, // Tỉ lệ tấn công so với phòng thủ
+    };
 
-    // --- CẤU HÌNH AI (HARDCORE) ---
-    // Cảnh báo: Tăng lên 6 có thể gây crash trình duyệt trên điện thoại
-    const AI_DEPTH = 5; 
+    let aiBrain = JSON.parse(JSON.stringify(DEFAULT_WEIGHTS));
     
-    // Heuristic Scores (Tăng trọng số tấn công)
-    const WIN_SCORE = 1000000000; // Thắng tuyệt đối
-    const LIVE_4 = 2000000;
-    const DEAD_4 = 150000; // Chặn 4 quan trọng hơn rất nhiều
-    const LIVE_3 = 100000;
-    const DEAD_3 = 800;
-    const LIVE_2 = 150;
+    // Tải não từ LocalStorage nếu có
+    if (localStorage.getItem('gomoku_ai_brain_v2')) {
+        try {
+            const saved = JSON.parse(localStorage.getItem('gomoku_ai_brain_v2'));
+            aiBrain = { ...DEFAULT_WEIGHTS, ...saved }; // Merge để tránh lỗi thiếu key
+            log("Loaded saved neural weights.");
+        } catch (e) { console.error("Brain corrupted", e); }
+    }
+    updateUI();
 
-    let isDragging = false;
-    let lastMousePos = {x:0, y:0};
+    function log(msg, type = "") {
+        const p = document.createElement('p');
+        p.innerText = `> ${msg}`;
+        if(type) p.className = type;
+        logEl.appendChild(p);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
 
-    function initGame() {
-        board = {};
-        gameOver = false;
-        lastMove = null;
-        moveCount = 0;
-        camera = { x: 0, y: 0, zoom: 1 };
-        minX = 0; maxX = 0; minY = 0; maxY = 0;
+    function updateUI() {
+        document.getElementById('xp-display').innerText = aiBrain.gamesPlayed;
         
-        turn = "O"; 
-        
-        statusEl.innerHTML = `Lượt: <span class="turn-o">AI (O) ĐI TRƯỚC</span>`;
-        
-        // AI đi trước đánh luôn vào tâm
-        setTimeout(() => {
-            makeMove(0, 0, "O");
-        }, 500);
+        // Tính % thay đổi so với mặc định
+        const p3 = Math.round((aiBrain.def_live_3 / DEFAULT_WEIGHTS.def_live_3) * 100);
+        const p4 = Math.round((aiBrain.def_dead_4 / DEFAULT_WEIGHTS.def_dead_4) * 100);
+        const pa = Math.round((aiBrain.atk_scale / DEFAULT_WEIGHTS.atk_scale) * 100);
 
+        document.getElementById('fear-3').innerText = `${p3}%`;
+        document.getElementById('fear-3').style.color = p3 > 100 ? "#ffcc00" : "#fff";
+        
+        document.getElementById('fear-4').innerText = `${p4}%`;
+        document.getElementById('fear-4').style.color = p4 > 100 ? "#ff3333" : "#fff";
+
+        document.getElementById('aggro').innerText = `${pa}%`;
+    }
+
+    function saveBrain() {
+        localStorage.setItem('gomoku_ai_brain_v2', JSON.stringify(aiBrain));
+        updateUI();
+    }
+
+    function clearBrain() {
+        if(confirm("Bạn có chắc muốn tẩy não AI về trạng thái ngây thơ ban đầu?")) {
+            localStorage.removeItem('gomoku_ai_brain_v2');
+            location.reload();
+        }
+    }
+
+    // --- GAME ENGINE ---
+    function init() {
+        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+        window.dispatchEvent(new Event('resize'));
+        canvas.addEventListener('click', handleClick);
+        // Dragging
+        let isDown = false, startX, startY;
+        canvas.addEventListener('mousedown', e => { isDown = true; startX = e.clientX; startY = e.clientY; });
+        canvas.addEventListener('mousemove', e => {
+            if(!isDown) return;
+            camera.x += e.clientX - startX; camera.y += e.clientY - startY;
+            startX = e.clientX; startY = e.clientY;
+        });
+        canvas.addEventListener('mouseup', () => isDown = false);
         render();
     }
 
-    // --- EVENTS ---
-    window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
-    window.dispatchEvent(new Event('resize'));
+    function resetGame() {
+        board = {}; turn = "X"; gameOver = false; lastMove = null;
+        minX=0; maxX=0; minY=0; maxY=0;
+        statusEl.innerText = "Lượt Bạn (X)";
+        statusEl.className = "val";
+        render();
+    }
 
-    canvas.addEventListener('mousedown', e => { isDragging = false; lastMousePos = {x: e.clientX, y: e.clientY}; });
-    window.addEventListener('mousemove', e => {
-        if (e.buttons === 1) {
-            const dx = e.clientX - lastMousePos.x;
-            const dy = e.clientY - lastMousePos.y;
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-                isDragging = true;
-                camera.x += dx; camera.y += dy;
-                lastMousePos = {x: e.clientX, y: e.clientY};
-            }
-        }
-    });
-    canvas.addEventListener('wheel', e => {
-        camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1);
-        camera.zoom = Math.min(Math.max(camera.zoom, 0.4), 2.0);
-    });
-
-    canvas.addEventListener('click', e => {
-        if (isDragging || gameOver || turn === "O") return;
+    function handleClick(e) {
+        if (gameOver || turn === "O") return;
         const pos = screenToWorld(e.clientX, e.clientY);
-        
         if (!board[`${pos.x},${pos.y}`]) {
             makeMove(pos.x, pos.y, "X");
             if (!gameOver) {
-                overlay.style.display = "flex"; 
-                // Delay nhỏ để trình duyệt kịp vẽ nước đi của bạn trước khi bị treo để tính toán
-                setTimeout(() => {
-                    aiTurn();
-                    overlay.style.display = "none";
-                }, 50);
+                statusEl.innerText = "AI đang suy nghĩ...";
+                statusEl.className = "turn-o";
+                thinkingBar.style.display = "block";
+                setTimeout(aiTurn, 50);
             }
         }
-    });
+    }
 
     function screenToWorld(sx, sy) {
-        const x = Math.floor((sx - canvas.width/2 - camera.x) / (CELL_SIZE * camera.zoom));
-        const y = Math.floor((sy - canvas.height/2 - camera.y) / (CELL_SIZE * camera.zoom));
-        return {x, y};
+        return {
+            x: Math.floor((sx - canvas.width/2 - camera.x) / CELL_SIZE),
+            y: Math.floor((sy - canvas.height/2 - camera.y) / CELL_SIZE)
+        };
     }
 
     function makeMove(x, y, p) {
         board[`${x},${y}`] = p;
         lastMove = {x, y};
-        moveCount++;
-        updateBounds(x, y);
+        // Update bounds
+        if (Object.keys(board).length === 1) { minX=maxX=x; minY=maxY=y; }
+        else { minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); }
 
         if (checkWin(x, y, p)) {
-            statusEl.innerHTML = p === "X" ? "<span class='turn-x'>CHIẾN THẮNG (LỖI GAME?)</span>" : "<span class='turn-o'>BẠN ĐÃ THUA</span>";
             gameOver = true;
+            thinkingBar.style.display = "none";
+            handleGameOver(p);
         } else {
             turn = p === "X" ? "O" : "X";
-            statusEl.innerHTML = `Lượt: <span class="turn-${turn.toLowerCase()}">${turn === "X" ? "Bạn (X)" : "AI (O)"}</span>`;
+            if (turn === "X") {
+                statusEl.innerText = "Lượt Bạn (X)";
+                statusEl.className = "turn-x";
+            }
         }
         render();
     }
 
-    function updateBounds(x, y) {
-        if (moveCount === 1) {
-            minX = maxX = x;
-            minY = maxY = y;
+    // --- KHẢ NĂNG HỌC TẬP (LEARNING CORE) ---
+    function handleGameOver(winner) {
+        aiBrain.gamesPlayed++;
+        
+        if (winner === "O") {
+            statusEl.innerText = "AI THẮNG! Nó trở nên tự tin hơn.";
+            aiBrain.win++;
+            // Nếu AI thắng, nó tăng nhẹ độ hung hăng (tấn công)
+            aiBrain.atk_scale = Math.min(3.0, aiBrain.atk_scale * 1.05);
+            log("AI Won. Confidence increased.", "log-learn");
         } else {
-            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+            statusEl.innerText = "BẠN THẮNG. AI đang phân tích lỗi sai...";
+            aiBrain.loss++;
+            // Nếu AI thua, nó phải học tại sao
+            analyzeLoss();
         }
+        saveBrain();
     }
 
-    // --- AI ENGINE ---
-    function aiTurn() {
-        // 1. Check Urgent (Thắng ngay hoặc Chặn thua ngay lập tức) - Depth 1 nhanh
-        const urgentMove = checkUrgentMove();
-        if (urgentMove) {
-            makeMove(urgentMove.x, urgentMove.y, "O");
-            return;
-        }
-
-        let bestScore = -Infinity;
-        let bestMove = null;
+    function analyzeLoss() {
+        // AI quét bàn cờ xem bạn đã thắng bằng nước đi nào (Pattern Recognition)
+        // Chúng ta giả lập việc "nhìn lại" bàn cờ
+        let criticalPatternFound = false;
         
-        const moves = generateMoves();
-        
-        // Sắp xếp nước đi tốt nhất để duyệt trước
-        moves.sort((a, b) => {
-            let sA = evaluatePoint(a.x, a.y, "O") * 1.5 + evaluatePoint(a.x, a.y, "X");
-            let sB = evaluatePoint(b.x, b.y, "O") * 1.5 + evaluatePoint(b.x, b.y, "X");
-            return sB - sA;
-        });
-
-        // Chỉ chọn TOP 8 nước đi tốt nhất để duyệt sâu (Narrow Beam Search)
-        // Nếu duyệt hết thì depth 5 sẽ làm treo trình duyệt
-        const topMoves = moves.slice(0, 8);
-
-        for (let move of topMoves) {
-            board[`${move.x},${move.y}`] = "O";
-            // Gọi Minimax
-            let score = minimax(AI_DEPTH - 1, -Infinity, Infinity, false);
-            delete board[`${move.x},${move.y}`];
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = move;
+        // Quét xung quanh nước đi cuối của người chơi (lastMove)
+        if (lastMove) {
+            const threatScore = evaluatePoint(lastMove.x, lastMove.y, "X", true); // true = raw score
+            
+            // Nếu người chơi thắng bằng Live 3 (mà AI không chặn kịp thành Live 4)
+            // Hoặc thắng bằng Dead 4
+            if (threatScore >= DEFAULT_WEIGHTS.def_live_3) {
+                 // Tăng chỉ số sợ hãi
+                 aiBrain.def_live_3 *= 1.3; // Sợ nước 3 hơn 30%
+                 aiBrain.def_dead_3 *= 1.3;
+                 aiBrain.def_live_2 *= 1.2; // Đề phòng từ trứng nước
+                 log("LEARNED: Player uses Live 3 traps!", "log-learn");
+                 criticalPatternFound = true;
+            }
+            
+            if (threatScore >= DEFAULT_WEIGHTS.def_dead_4) {
+                aiBrain.def_dead_4 *= 1.5; // Cực sợ nước 4 bị chặn
+                log("LEARNED: Failed to block Dead 4.", "log-learn");
+                criticalPatternFound = true;
             }
         }
 
-        if (bestMove) makeMove(bestMove.x, bestMove.y, "O");
+        // Nếu thua mà không rõ lý do cụ thể (bị outplay từ từ), tăng phòng thủ chung
+        if (!criticalPatternFound) {
+            aiBrain.def_live_2 *= 1.1;
+            log("LEARNED: General defense boosted.", "log-learn");
+        }
+        
+        // Giảm bớt độ hung hăng để đánh chắc hơn
+        aiBrain.atk_scale = Math.max(0.8, aiBrain.atk_scale * 0.9);
     }
 
-    function checkUrgentMove() {
+    // --- AI ENGINE (MINIMAX + ALPHA BETA) ---
+    function aiTurn() {
+        // AI sử dụng trọng số từ aiBrain để tính toán
+        
+        // 1. Kiểm tra thắng ngay/thua ngay (VCF)
         const moves = generateMoves();
-        for (let m of moves) {
+        
+        // Check win
+        for(let m of moves) {
             board[`${m.x},${m.y}`] = "O";
-            if (checkWin(m.x, m.y, "O")) { delete board[`${m.x},${m.y}`]; return m; } // Win
+            if(checkWin(m.x, m.y, "O")) { 
+                makeMove(m.x, m.y, "O"); return; 
+            }
             delete board[`${m.x},${m.y}`];
         }
-        for (let m of moves) {
+        // Check lose (Block immediate win)
+        for(let m of moves) {
             board[`${m.x},${m.y}`] = "X";
-            if (checkWin(m.x, m.y, "X")) { delete board[`${m.x},${m.y}`]; return m; } // Block Lose
+            if(checkWin(m.x, m.y, "X")) { 
+                delete board[`${m.x},${m.y}`];
+                makeMove(m.x, m.y, "O"); return; 
+            }
             delete board[`${m.x},${m.y}`];
         }
-        return null;
+
+        // 2. Minimax Depth 2 (Nhẹ nhàng nhưng dùng não to - Weights lớn)
+        // Lưu ý: Do dùng JS thuần, Depth cao sẽ lag, nên ta bù bằng Heuristic thông minh (Learning)
+        let bestMove = null;
+        let bestScore = -Infinity;
+        
+        // Sort moves để cắt tỉa tốt hơn
+        moves.sort((a,b) => {
+            // Heuristic sơ bộ
+            return (evaluatePoint(b.x, b.y, "O") + evaluatePoint(b.x, b.y, "X")) - 
+                   (evaluatePoint(a.x, a.y, "O") + evaluatePoint(a.x, a.y, "X"));
+        });
+
+        const limit = 12; // Chỉ xét 12 nước ngon nhất
+        let count = 0;
+
+        for (let m of moves) {
+            if (count++ > limit) break;
+            board[`${m.x},${m.y}`] = "O";
+            let score = minimax(1, -Infinity, Infinity, false); // Depth 2 total (1 recursion)
+            delete board[`${m.x},${m.y}`];
+            
+            // Random hóa nhẹ để AI không bị máy móc (Human-like)
+            score += Math.random() * 5; 
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = m;
+            }
+        }
+        
+        thinkingBar.style.display = "none";
+        if (bestMove) makeMove(bestMove.x, bestMove.y, "O");
+        else {
+             // Bàn cờ trống hoặc bí
+             makeMove(0,0,"O");
+        }
     }
 
-    function minimax(depth, alpha, beta, isMaximizing) {
+    function minimax(depth, alpha, beta, isMax) {
         if (depth === 0) return evaluateBoard();
-
+        
         const moves = generateMoves();
-        
-        // Sorting Heuristic trong đệ quy
-        if (moves.length > 1) {
-             moves.sort((a, b) => {
-                 // Ưu tiên nước đi gần lastMove nhất để tạo cục bộ
-                 let distA = Math.abs(a.x - lastMove.x) + Math.abs(a.y - lastMove.y);
-                 let distB = Math.abs(b.x - lastMove.x) + Math.abs(b.y - lastMove.y);
-                 return distA - distB;
-             });
-        }
-        
-        // Càng xuống sâu càng cắt giảm nhánh để giữ tốc độ
-        // Depth 4 -> check 6 moves, Depth 3 -> check 5 moves...
-        let limit = Math.max(3, 4 + depth);
-        const searchMoves = moves.slice(0, limit); 
+        const checkLimit = 8; // Giới hạn tìm kiếm sâu
 
-        if (isMaximizing) {
+        if (isMax) {
             let maxEval = -Infinity;
-            for (let move of searchMoves) {
-                board[`${move.x},${move.y}`] = "O";
-                if (checkWin(move.x, move.y, "O")) { delete board[`${move.x},${move.y}`]; return WIN_SCORE; }
-                
-                let eval = minimax(depth - 1, alpha, beta, false);
-                delete board[`${move.x},${move.y}`];
-                
+            for (let i=0; i<Math.min(moves.length, checkLimit); i++) {
+                let m = moves[i];
+                board[`${m.x},${m.y}`] = "O";
+                let eval = minimax(depth-1, alpha, beta, false);
+                delete board[`${m.x},${m.y}`];
                 maxEval = Math.max(maxEval, eval);
                 alpha = Math.max(alpha, eval);
-                if (beta <= alpha) break;
+                if(beta <= alpha) break;
             }
             return maxEval;
         } else {
             let minEval = Infinity;
-            for (let move of searchMoves) {
-                board[`${move.x},${move.y}`] = "X";
-                if (checkWin(move.x, move.y, "X")) { delete board[`${move.x},${move.y}`]; return -WIN_SCORE; }
-                
-                let eval = minimax(depth - 1, alpha, beta, true);
-                delete board[`${move.x},${move.y}`];
-                
+             for (let i=0; i<Math.min(moves.length, checkLimit); i++) {
+                let m = moves[i];
+                board[`${m.x},${m.y}`] = "X";
+                let eval = minimax(depth-1, alpha, beta, true);
+                delete board[`${m.x},${m.y}`];
                 minEval = Math.min(minEval, eval);
                 beta = Math.min(beta, eval);
-                if (beta <= alpha) break;
+                if(beta <= alpha) break;
             }
             return minEval;
         }
@@ -297,136 +374,111 @@
         for (let key in board) {
             let [x, y] = key.split(',').map(Number);
             let p = board[key];
-            let pointScore = evaluatePoint(x, y, p);
-            if (p === "O") score += pointScore;
-            else score -= pointScore * 1.1; // Cân bằng tấn công/phòng thủ
+            let val = evaluatePoint(x, y, p);
+            if (p === "O") score += val * aiBrain.atk_scale; // Điểm tấn công nhân với hệ số hung hăng
+            else score -= val; // Điểm phòng thủ (đã được boost nếu thua nhiều)
         }
         return score;
     }
 
-    function evaluatePoint(x, y, p) {
+    function evaluatePoint(x, y, p, raw = false) {
         let total = 0;
-        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
-        for (let [dx, dy] of dirs) {
-            let line = getLineStr(x, y, dx, dy, p);
-            total += matchPattern(line);
+        const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+        for (let d of dirs) {
+            let s = "";
+            for (let i=-4; i<=4; i++) {
+                let v = board[`${x+d[0]*i},${y+d[1]*i}`];
+                if (v===p) s+="M"; else if(v===undefined) s+="_"; else s+="E";
+            }
+            total += matchPattern(s, raw);
         }
         return total;
     }
 
-    function getLineStr(x, y, dx, dy, p) {
-        let s = "";
-        for (let i = -4; i <= 4; i++) {
-            let val = board[`${x + dx*i},${y + dy*i}`];
-            if (val === p) s += "M"; 
-            else if (val === undefined) s += "_"; 
-            else s += "E"; 
-        }
-        return s;
-    }
-
-    function matchPattern(s) {
+    function matchPattern(s, raw) {
+        // Sử dụng các trọng số từ aiBrain
+        const W = raw ? DEFAULT_WEIGHTS : aiBrain;
+        
         let score = 0;
-        if (s.includes("MMMMM")) return WIN_SCORE;
-        if (s.includes("_MMMM_")) return LIVE_4;
-        if (s.includes("MMMM_") || s.includes("_MMMM") || s.includes("MM_MM") || s.includes("M_MMM") || s.includes("MMM_M")) score += DEAD_4;
-        if (s.includes("_MMM_") || s.includes("_M_MM_") || s.includes("_MM_M_")) score += LIVE_3;
-        if (s.includes("MMM__") || s.includes("__MMM") || s.includes("M_MM") || s.includes("MM_M")) score += DEAD_3;
-        if (s.includes("_MM_") || s.includes("_M_M_")) score += LIVE_2;
+        if (s.includes("MMMMM")) return 100000000;
+        if (s.includes("_MMMM_")) return W.def_live_4 * 1.5; // Live 4 gần như thắng
+        if (s.includes("MMMM_") || s.includes("_MMMM") || s.includes("MM_MM")) score += W.def_dead_4;
+        if (s.includes("_MMM_") || s.includes("_M_MM_")) score += W.def_live_3;
+        if (s.includes("MMM__") || s.includes("__MMM")) score += W.def_dead_3;
+        if (s.includes("_MM_") || s.includes("_M_M_")) score += W.def_live_2;
         return score;
     }
 
     function generateMoves() {
-        let moves = new Set();
-        let startX = minX - 2; let endX = maxX + 2;
-        let startY = minY - 2; let endY = maxY + 2;
-
-        for (let key in board) {
-            let [x, y] = key.split(',').map(Number);
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    if (i===0 && j===0) continue;
-                    let nx = x+i, ny = y+j;
-                    if (!board[`${nx},${ny}`]) {
-                        moves.add(`${nx},${ny}`);
+        let moves = [];
+        let checked = new Set();
+        let range = 2; 
+        for(let key in board) {
+            let [bx, by] = key.split(',').map(Number);
+            for(let i=-range; i<=range; i++) {
+                for(let j=-range; j<=range; j++) {
+                    let nx=bx+i, ny=by+j;
+                    if(!board[`${nx},${ny}`] && !checked.has(`${nx},${ny}`)) {
+                        moves.push({x:nx, y:ny});
+                        checked.add(`${nx},${ny}`);
                     }
                 }
             }
         }
-        return Array.from(moves).map(k => {
-            let [x, y] = k.split(',').map(Number);
-            return {x, y};
-        });
+        return moves;
     }
 
     function checkWin(x, y, p) {
         const dirs = [[1,0], [0,1], [1,1], [1,-1]];
-        for (let [dx, dy] of dirs) {
-            let count = 1;
-            let i = 1; while (board[`${x + dx*i},${y + dy*i}`] === p) { count++; i++; }
-            i = 1; while (board[`${x - dx*i},${y - dy*i}`] === p) { count++; i++; }
-            if (count >= 5) return true;
+        for (let d of dirs) {
+            let c = 1;
+            let i = 1; while (board[`${x+d[0]*i},${y+d[1]*i}`] === p) { c++; i++; }
+            i = 1; while (board[`${x-d[0]*i},${y-d[1]*i}`] === p) { c++; i++; }
+            if (c >= 5) return true;
         }
         return false;
     }
 
     // --- RENDER ---
     function render() {
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#050505"; ctx.fillRect(0,0,canvas.width,canvas.height);
         
-        const currentCell = CELL_SIZE * camera.zoom;
-        const offX = (canvas.width/2 + camera.x) % currentCell;
-        const offY = (canvas.height/2 + camera.y) % currentCell;
-
-        // Grid (Darker)
-        ctx.beginPath(); ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
-        for (let x = offX; x < canvas.width; x += currentCell) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
-        for (let y = offY; y < canvas.height; y += currentCell) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+        const cS = CELL_SIZE; 
+        const ox = (canvas.width/2 - camera.x) % cS;
+        const oy = (canvas.height/2 - camera.y) % cS;
+        
+        ctx.beginPath(); ctx.strokeStyle = "#222";
+        for(let x=ox; x<canvas.width; x+=cS) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
+        for(let y=oy; y<canvas.height; y+=cS) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
         ctx.stroke();
 
         if (lastMove) {
-            const lx = lastMove.x * currentCell + canvas.width/2 + camera.x;
-            const ly = lastMove.y * currentCell + canvas.height/2 + camera.y;
-            ctx.fillStyle = "rgba(255, 50, 50, 0.2)";
-            ctx.fillRect(lx, ly, currentCell, currentCell);
-            ctx.strokeStyle = "#ff3838"; ctx.lineWidth = 2;
-            ctx.strokeRect(lx, ly, currentCell, currentCell);
+            let lx = lastMove.x*cS + canvas.width/2 + camera.x;
+            let ly = lastMove.y*cS + canvas.height/2 + camera.y;
+            ctx.fillStyle = "rgba(0,255,0,0.1)"; ctx.fillRect(lx,ly,cS,cS);
+            ctx.strokeStyle = "#0f0"; ctx.strokeRect(lx,ly,cS,cS);
         }
 
-        for (let key in board) {
-            const [bx, by] = key.split(',').map(Number);
-            const pX = bx * currentCell + canvas.width/2 + camera.x;
-            const pY = by * currentCell + canvas.height/2 + camera.y;
-            if (pX > -currentCell && pX < canvas.width && pY > -currentCell && pY < canvas.height) {
-                drawPiece(pX, pY, board[key], currentCell);
+        for(let k in board) {
+            let [bx,by] = k.split(',').map(Number);
+            let px = bx*cS + canvas.width/2 + camera.x;
+            let py = by*cS + canvas.height/2 + camera.y;
+            if (px>-cS && px<canvas.width && py>-cS && py<canvas.height) {
+                ctx.beginPath();
+                if(board[k]==="X") {
+                    ctx.strokeStyle="#ff3333"; ctx.lineWidth=3;
+                    ctx.moveTo(px+10,py+10); ctx.lineTo(px+cS-10,py+cS-10);
+                    ctx.moveTo(px+cS-10,py+10); ctx.lineTo(px+10,py+cS-10);
+                } else {
+                    ctx.strokeStyle="#0f0"; ctx.lineWidth=3;
+                    ctx.arc(px+cS/2, py+cS/2, cS/2-8, 0, Math.PI*2);
+                }
+                ctx.stroke();
             }
         }
     }
 
-    function drawPiece(x, y, type, size) {
-        const p = size * 0.2;
-        ctx.lineWidth = size * 0.12;
-        ctx.lineCap = "round";
-        
-        if (type === "X") {
-            ctx.strokeStyle = "#fff"; 
-            ctx.shadowColor = "#fff"; ctx.shadowBlur = 5;
-            ctx.beginPath();
-            ctx.moveTo(x+p, y+p); ctx.lineTo(x+size-p, y+size-p);
-            ctx.moveTo(x+size-p, y+p); ctx.lineTo(x+p, y+size-p);
-            ctx.stroke();
-        } else {
-            ctx.strokeStyle = "#ff3838";
-            ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 15;
-            ctx.beginPath();
-            ctx.arc(x+size/2, y+size/2, size/2-p, 0, Math.PI*2);
-            ctx.stroke();
-        }
-        ctx.shadowBlur = 0;
-    }
-
-    initGame();
+    init();
 </script>
 </body>
 </html>
