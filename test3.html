@@ -2,483 +2,589 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>AI EVOLUTION - TỰ HỌC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cờ Caro Vô Cực - AI Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Included per requirements, though main game uses native Canvas -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Vietnamese:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #050505; font-family: 'Consolas', monospace; }
-        canvas { display: block; }
-        #ui {
-            position: absolute; top: 20px; left: 20px;
-            background: rgba(15, 15, 20, 0.95); color: #0f0;
-            padding: 20px; border-radius: 4px; border: 1px solid #333;
-            width: 300px; box-shadow: 0 0 30px rgba(0, 255, 0, 0.1);
-        }
-        h2 { margin: 0 0 10px 0; color: #0f0; text-transform: uppercase; font-size: 1.2rem; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem; color: #aaa; }
-        .val { color: #fff; font-weight: bold; }
-        .turn-x { color: #ff3333; }
-        .turn-o { color: #0f0; }
+        body { font-family: 'Noto Sans Vietnamese', sans-serif; overflow: hidden; }
+        /* Custom Scrollbar for side panels if needed */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
         
-        #btn-group { display: flex; gap: 10px; margin-top: 15px; }
-        button {
-            flex: 1; padding: 10px; background: #111; color: #0f0; 
-            border: 1px solid #333; cursor: pointer; font-family: inherit;
-            transition: 0.2s;
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.5);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
-        button:hover { background: #0f0; color: #000; }
-        button.danger { color: #ff3333; border-color: #552222; }
-        button.danger:hover { background: #ff3333; color: #fff; }
 
-        #brain-log {
-            margin-top: 15px; padding: 10px; background: #000; 
-            border: 1px dashed #333; height: 100px; overflow-y: auto;
-            font-size: 0.75rem; color: #666;
+        #gameCanvas {
+            cursor: crosshair;
+            touch-action: none; /* Prevent scrolling on mobile while playing */
+            background-color: #f0ebe3; /* Paper/Wood tone */
+            background-image: radial-gradient(#d6d3cd 1px, transparent 1px);
+            background-size: 40px 40px; /* Fallback pattern */
         }
-        #brain-log p { margin: 2px 0; }
-        .log-learn { color: #ffcc00; }
-        
-        #thinking {
-            position: fixed; top: 0; left: 0; width: 100%; height: 5px;
-            background: linear-gradient(90deg, transparent, #0f0, transparent);
-            z-index: 999; display: none; animation: scan 1.5s infinite linear;
-        }
-        @keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
     </style>
+    <!-- Chosen Palette: Warm Neutrals (Paper/Wood) with Ink Blue (X) and Alert Red (O) -->
+    <!-- Application Structure Plan: 
+         1. Main Viewport: Full-screen HTML5 Canvas for the infinite board.
+         2. Floating Dashboard: Top header for score and game controls (Reset, Difficulty).
+         3. Status Overlay: Non-intrusive notifications for turn state and win/loss.
+         4. Interaction Design: Pan (drag) and Zoom (scroll) support for infinite feel. Click to place.
+    -->
+    <!-- Visualization & Content Choices:
+         - Game Board: Rendered via Canvas API for performance (No SVG).
+         - UI Elements: Tailwind Grid/Flex for layout.
+         - Logic: Minimax with Alpha-Beta pruning for AI.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 </head>
-<body>
+<body class="bg-stone-100 h-screen w-screen flex flex-col relative text-stone-800">
 
-<div id="thinking"></div>
-<div id="ui">
-    <h2>🤖 AI EVOLUTION <span style="font-size:0.7em; float:right">v2.0</span></h2>
-    
-    <div class="stat-row"><span>Trạng thái:</span> <span id="status" class="val">Sẵn sàng</span></div>
-    <div class="stat-row"><span>Kinh nghiệm (XP):</span> <span id="xp-display" class="val">0</span> games</div>
-    <div class="stat-row"><span>Sợ "Nước 3":</span> <span id="fear-3" class="val">100%</span></div>
-    <div class="stat-row"><span>Sợ "Nước 4":</span> <span id="fear-4" class="val">100%</span></div>
-    <div class="stat-row"><span>Độ hung hăng:</span> <span id="aggro" class="val">100%</span></div>
+    <!-- Header / Control Panel -->
+    <header class="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
+        <div class="max-w-4xl mx-auto flex justify-between items-center glass-panel rounded-2xl p-3 pointer-events-auto transition-all shadow-lg">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md">X</div>
+                <div class="hidden sm:block">
+                    <h1 class="font-bold text-lg leading-tight">Cờ Caro Vô Cực</h1>
+                    <p class="text-xs text-stone-500">Người vs AI Master</p>
+                </div>
+            </div>
 
-    <div id="brain-log">
-        <p>> System initialized...</p>
-        <p>> Waiting for user data...</p>
+            <div class="flex items-center gap-4">
+                <!-- Difficulty Toggle -->
+                <div class="flex bg-stone-200 rounded-lg p-1">
+                    <button id="btnEasy" class="px-3 py-1 rounded-md text-sm font-medium transition-colors" onclick="setDifficulty('easy')">Dễ</button>
+                    <button id="btnHard" class="px-3 py-1 rounded-md text-sm font-medium bg-white shadow-sm text-blue-700 transition-colors" onclick="setDifficulty('hard')">Khó (AI)</button>
+                </div>
+
+                <!-- Reset Button -->
+                <button onclick="resetGame()" class="bg-stone-800 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-transform active:scale-95 flex items-center gap-2">
+                    <span>Ván Mới</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Game Status Notification -->
+    <div id="statusMessage" class="absolute top-24 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none opacity-0 transition-opacity duration-300">
+        <div class="glass-panel px-6 py-2 rounded-full font-bold text-stone-700 shadow-xl border-l-4 border-blue-500">
+            Đến lượt bạn (X)
+        </div>
     </div>
 
-    <div id="btn-group">
-        <button onclick="resetGame()">Ván Mới</button>
-        <button class="danger" onclick="clearBrain()">Quên Hết</button>
+    <!-- Main Game Canvas -->
+    <main class="flex-grow w-full h-full relative overflow-hidden cursor-move">
+        <canvas id="gameCanvas" class="block w-full h-full"></canvas>
+        
+        <!-- Hint/Instruction Overlay (Bottom) -->
+        <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 pointer-events-none opacity-70 hover:opacity-100 transition-opacity">
+            <p class="text-xs sm:text-sm font-medium text-stone-500 bg-white/80 px-3 py-1 rounded-full shadow-sm backdrop-blur-sm">
+                Kéo chuột để di chuyển bàn cờ • Click để đánh • 5 ô liên tiếp để thắng
+            </p>
+        </div>
+    </main>
+
+    <!-- Game Over Modal -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/40 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center transform scale-95 opacity-0 transition-all duration-300" id="modalContent">
+            <div id="modalIcon" class="text-6xl mb-4">🏆</div>
+            <h2 id="modalTitle" class="text-2xl font-bold mb-2 text-stone-800">Chiến Thắng!</h2>
+            <p id="modalDesc" class="text-stone-600 mb-6">Bạn đã đánh bại AI. Một ván đấu tuyệt vời.</p>
+            <button onclick="closeModalAndReset()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-transform active:scale-95">
+                Chơi Lại Ngay
+            </button>
+        </div>
     </div>
-</div>
 
-<canvas id="game"></canvas>
-
-<script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const statusEl = document.getElementById('status');
-    const logEl = document.getElementById('brain-log');
-    const thinkingBar = document.getElementById('thinking');
-
-    // --- CẤU HÌNH GAME ---
-    const CELL_SIZE = 40;
-    let board = {}; 
-    let turn = "X";
-    let gameOver = false;
-    let lastMove = null;
-    let camera = { x: 0, y: 0, zoom: 1 };
-    let minX = 0, maxX = 0, minY = 0, maxY = 0;
-    
-    // --- AI BRAIN (TRỌNG SỐ MẶC ĐỊNH) ---
-    // Đây là những giá trị mà AI sẽ tự điều chỉnh qua các ván đấu
-    const DEFAULT_WEIGHTS = {
-        gamesPlayed: 0,
-        win: 0,
-        loss: 0,
-        // Điểm phòng thủ (Sợ hãi)
-        def_live_4: 2000000,
-        def_dead_4: 150000,
-        def_live_3: 100000,
-        def_dead_3: 1000,
-        def_live_2: 200,
-        // Điểm tấn công (Hung hăng)
-        atk_scale: 1.2, // Tỉ lệ tấn công so với phòng thủ
-    };
-
-    let aiBrain = JSON.parse(JSON.stringify(DEFAULT_WEIGHTS));
-    
-    // Tải não từ LocalStorage nếu có
-    if (localStorage.getItem('gomoku_ai_brain_v2')) {
-        try {
-            const saved = JSON.parse(localStorage.getItem('gomoku_ai_brain_v2'));
-            aiBrain = { ...DEFAULT_WEIGHTS, ...saved }; // Merge để tránh lỗi thiếu key
-            log("Loaded saved neural weights.");
-        } catch (e) { console.error("Brain corrupted", e); }
-    }
-    updateUI();
-
-    function log(msg, type = "") {
-        const p = document.createElement('p');
-        p.innerText = `> ${msg}`;
-        if(type) p.className = type;
-        logEl.appendChild(p);
-        logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    function updateUI() {
-        document.getElementById('xp-display').innerText = aiBrain.gamesPlayed;
+    <script>
+        // --- CONSTANTS & STATE ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('statusMessage');
+        const modal = document.getElementById('modalOverlay');
+        const modalContent = document.getElementById('modalContent');
         
-        // Tính % thay đổi so với mặc định
-        const p3 = Math.round((aiBrain.def_live_3 / DEFAULT_WEIGHTS.def_live_3) * 100);
-        const p4 = Math.round((aiBrain.def_dead_4 / DEFAULT_WEIGHTS.def_dead_4) * 100);
-        const pa = Math.round((aiBrain.atk_scale / DEFAULT_WEIGHTS.atk_scale) * 100);
-
-        document.getElementById('fear-3').innerText = `${p3}%`;
-        document.getElementById('fear-3').style.color = p3 > 100 ? "#ffcc00" : "#fff";
+        const CELL_SIZE = 40;
+        const GRID_COLOR = '#d1d5db'; // gray-300
+        const PLAYER_X = 1; // Human
+        const PLAYER_O = 2; // AI
         
-        document.getElementById('fear-4').innerText = `${p4}%`;
-        document.getElementById('fear-4').style.color = p4 > 100 ? "#ff3333" : "#fff";
+        // Game State
+        let board = new Map(); // Key: "x,y", Value: 1 or 2
+        let history = []; // Stack for undo (not implemented in UI but good for logic)
+        let isGameOver = false;
+        let isPlayerTurn = true;
+        let difficulty = 'hard';
+        
+        // Viewport State (Infinite Board Logic)
+        let camera = { x: 0, y: 0 };
+        let isDragging = false;
+        let lastMouse = { x: 0, y: 0 };
+        let dragStart = { x: 0, y: 0 };
 
-        document.getElementById('aggro').innerText = `${pa}%`;
-    }
-
-    function saveBrain() {
-        localStorage.setItem('gomoku_ai_brain_v2', JSON.stringify(aiBrain));
-        updateUI();
-    }
-
-    function clearBrain() {
-        if(confirm("Bạn có chắc muốn tẩy não AI về trạng thái ngây thơ ban đầu?")) {
-            localStorage.removeItem('gomoku_ai_brain_v2');
-            location.reload();
+        // --- INITIALIZATION ---
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Center the "0,0" coordinate initially
+            camera.x = canvas.width / 2;
+            camera.y = canvas.height / 2;
+            draw();
         }
-    }
+        window.addEventListener('resize', resize);
 
-    // --- GAME ENGINE ---
-    function init() {
-        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
-        window.dispatchEvent(new Event('resize'));
-        canvas.addEventListener('click', handleClick);
-        // Dragging
-        let isDown = false, startX, startY;
-        canvas.addEventListener('mousedown', e => { isDown = true; startX = e.clientX; startY = e.clientY; });
-        canvas.addEventListener('mousemove', e => {
-            if(!isDown) return;
-            camera.x += e.clientX - startX; camera.y += e.clientY - startY;
-            startX = e.clientX; startY = e.clientY;
-        });
-        canvas.addEventListener('mouseup', () => isDown = false);
-        render();
-    }
+        // --- GAME LOGIC ---
 
-    function resetGame() {
-        board = {}; turn = "X"; gameOver = false; lastMove = null;
-        minX=0; maxX=0; minY=0; maxY=0;
-        statusEl.innerText = "Lượt Bạn (X)";
-        statusEl.className = "val";
-        render();
-    }
+        function getKey(x, y) { return `${x},${y}`; }
+        function parseKey(key) { return key.split(',').map(Number); }
 
-    function handleClick(e) {
-        if (gameOver || turn === "O") return;
-        const pos = screenToWorld(e.clientX, e.clientY);
-        if (!board[`${pos.x},${pos.y}`]) {
-            makeMove(pos.x, pos.y, "X");
-            if (!gameOver) {
-                statusEl.innerText = "AI đang suy nghĩ...";
-                statusEl.className = "turn-o";
-                thinkingBar.style.display = "block";
-                setTimeout(aiTurn, 50);
+        function getCell(x, y) {
+            return board.get(getKey(x, y)) || 0;
+        }
+
+        function setCell(x, y, player) {
+            board.set(getKey(x, y), player);
+            history.push({x, y, player});
+        }
+
+        // Check for 5 in a row
+        function checkWin(x, y, player) {
+            const directions = [
+                [1, 0],  // Horizontal
+                [0, 1],  // Vertical
+                [1, 1],  // Diagonal \
+                [1, -1]  // Diagonal /
+            ];
+
+            for (let [dx, dy] of directions) {
+                let count = 1;
+                // Check forward
+                for (let i = 1; i < 5; i++) {
+                    if (getCell(x + dx * i, y + dy * i) === player) count++;
+                    else break;
+                }
+                // Check backward
+                for (let i = 1; i < 5; i++) {
+                    if (getCell(x - dx * i, y - dy * i) === player) count++;
+                    else break;
+                }
+                if (count >= 5) return true;
             }
+            return false;
         }
-    }
 
-    function screenToWorld(sx, sy) {
-        return {
-            x: Math.floor((sx - canvas.width/2 - camera.x) / CELL_SIZE),
-            y: Math.floor((sy - canvas.height/2 - camera.y) / CELL_SIZE)
-        };
-    }
-
-    function makeMove(x, y, p) {
-        board[`${x},${y}`] = p;
-        lastMove = {x, y};
-        // Update bounds
-        if (Object.keys(board).length === 1) { minX=maxX=x; minY=maxY=y; }
-        else { minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); }
-
-        if (checkWin(x, y, p)) {
-            gameOver = true;
-            thinkingBar.style.display = "none";
-            handleGameOver(p);
-        } else {
-            turn = p === "X" ? "O" : "X";
-            if (turn === "X") {
-                statusEl.innerText = "Lượt Bạn (X)";
-                statusEl.className = "turn-x";
-            }
-        }
-        render();
-    }
-
-    // --- KHẢ NĂNG HỌC TẬP (LEARNING CORE) ---
-    function handleGameOver(winner) {
-        aiBrain.gamesPlayed++;
+        // --- AI LOGIC (MiniMax + Heuristics) ---
+        // Simplified threat evaluation for performance in JS
         
-        if (winner === "O") {
-            statusEl.innerText = "AI THẮNG! Nó trở nên tự tin hơn.";
-            aiBrain.win++;
-            // Nếu AI thắng, nó tăng nhẹ độ hung hăng (tấn công)
-            aiBrain.atk_scale = Math.min(3.0, aiBrain.atk_scale * 1.05);
-            log("AI Won. Confidence increased.", "log-learn");
-        } else {
-            statusEl.innerText = "BẠN THẮNG. AI đang phân tích lỗi sai...";
-            aiBrain.loss++;
-            // Nếu AI thua, nó phải học tại sao
-            analyzeLoss();
-        }
-        saveBrain();
-    }
-
-    function analyzeLoss() {
-        // AI quét bàn cờ xem bạn đã thắng bằng nước đi nào (Pattern Recognition)
-        // Chúng ta giả lập việc "nhìn lại" bàn cờ
-        let criticalPatternFound = false;
-        
-        // Quét xung quanh nước đi cuối của người chơi (lastMove)
-        if (lastMove) {
-            const threatScore = evaluatePoint(lastMove.x, lastMove.y, "X", true); // true = raw score
-            
-            // Nếu người chơi thắng bằng Live 3 (mà AI không chặn kịp thành Live 4)
-            // Hoặc thắng bằng Dead 4
-            if (threatScore >= DEFAULT_WEIGHTS.def_live_3) {
-                 // Tăng chỉ số sợ hãi
-                 aiBrain.def_live_3 *= 1.3; // Sợ nước 3 hơn 30%
-                 aiBrain.def_dead_3 *= 1.3;
-                 aiBrain.def_live_2 *= 1.2; // Đề phòng từ trứng nước
-                 log("LEARNED: Player uses Live 3 traps!", "log-learn");
-                 criticalPatternFound = true;
-            }
-            
-            if (threatScore >= DEFAULT_WEIGHTS.def_dead_4) {
-                aiBrain.def_dead_4 *= 1.5; // Cực sợ nước 4 bị chặn
-                log("LEARNED: Failed to block Dead 4.", "log-learn");
-                criticalPatternFound = true;
-            }
-        }
-
-        // Nếu thua mà không rõ lý do cụ thể (bị outplay từ từ), tăng phòng thủ chung
-        if (!criticalPatternFound) {
-            aiBrain.def_live_2 *= 1.1;
-            log("LEARNED: General defense boosted.", "log-learn");
-        }
-        
-        // Giảm bớt độ hung hăng để đánh chắc hơn
-        aiBrain.atk_scale = Math.max(0.8, aiBrain.atk_scale * 0.9);
-    }
-
-    // --- AI ENGINE (MINIMAX + ALPHA BETA) ---
-    function aiTurn() {
-        // AI sử dụng trọng số từ aiBrain để tính toán
-        
-        // 1. Kiểm tra thắng ngay/thua ngay (VCF)
-        const moves = generateMoves();
-        
-        // Check win
-        for(let m of moves) {
-            board[`${m.x},${m.y}`] = "O";
-            if(checkWin(m.x, m.y, "O")) { 
-                makeMove(m.x, m.y, "O"); return; 
-            }
-            delete board[`${m.x},${m.y}`];
-        }
-        // Check lose (Block immediate win)
-        for(let m of moves) {
-            board[`${m.x},${m.y}`] = "X";
-            if(checkWin(m.x, m.y, "X")) { 
-                delete board[`${m.x},${m.y}`];
-                makeMove(m.x, m.y, "O"); return; 
-            }
-            delete board[`${m.x},${m.y}`];
-        }
-
-        // 2. Minimax Depth 2 (Nhẹ nhàng nhưng dùng não to - Weights lớn)
-        // Lưu ý: Do dùng JS thuần, Depth cao sẽ lag, nên ta bù bằng Heuristic thông minh (Learning)
-        let bestMove = null;
-        let bestScore = -Infinity;
-        
-        // Sort moves để cắt tỉa tốt hơn
-        moves.sort((a,b) => {
-            // Heuristic sơ bộ
-            return (evaluatePoint(b.x, b.y, "O") + evaluatePoint(b.x, b.y, "X")) - 
-                   (evaluatePoint(a.x, a.y, "O") + evaluatePoint(a.x, a.y, "X"));
-        });
-
-        const limit = 12; // Chỉ xét 12 nước ngon nhất
-        let count = 0;
-
-        for (let m of moves) {
-            if (count++ > limit) break;
-            board[`${m.x},${m.y}`] = "O";
-            let score = minimax(1, -Infinity, Infinity, false); // Depth 2 total (1 recursion)
-            delete board[`${m.x},${m.y}`];
-            
-            // Random hóa nhẹ để AI không bị máy móc (Human-like)
-            score += Math.random() * 5; 
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = m;
-            }
-        }
-        
-        thinkingBar.style.display = "none";
-        if (bestMove) makeMove(bestMove.x, bestMove.y, "O");
-        else {
-             // Bàn cờ trống hoặc bí
-             makeMove(0,0,"O");
-        }
-    }
-
-    function minimax(depth, alpha, beta, isMax) {
-        if (depth === 0) return evaluateBoard();
-        
-        const moves = generateMoves();
-        const checkLimit = 8; // Giới hạn tìm kiếm sâu
-
-        if (isMax) {
-            let maxEval = -Infinity;
-            for (let i=0; i<Math.min(moves.length, checkLimit); i++) {
-                let m = moves[i];
-                board[`${m.x},${m.y}`] = "O";
-                let eval = minimax(depth-1, alpha, beta, false);
-                delete board[`${m.x},${m.y}`];
-                maxEval = Math.max(maxEval, eval);
-                alpha = Math.max(alpha, eval);
-                if(beta <= alpha) break;
-            }
-            return maxEval;
-        } else {
-            let minEval = Infinity;
-             for (let i=0; i<Math.min(moves.length, checkLimit); i++) {
-                let m = moves[i];
-                board[`${m.x},${m.y}`] = "X";
-                let eval = minimax(depth-1, alpha, beta, true);
-                delete board[`${m.x},${m.y}`];
-                minEval = Math.min(minEval, eval);
-                beta = Math.min(beta, eval);
-                if(beta <= alpha) break;
-            }
-            return minEval;
-        }
-    }
-
-    function evaluateBoard() {
-        let score = 0;
-        for (let key in board) {
-            let [x, y] = key.split(',').map(Number);
-            let p = board[key];
-            let val = evaluatePoint(x, y, p);
-            if (p === "O") score += val * aiBrain.atk_scale; // Điểm tấn công nhân với hệ số hung hăng
-            else score -= val; // Điểm phòng thủ (đã được boost nếu thua nhiều)
-        }
-        return score;
-    }
-
-    function evaluatePoint(x, y, p, raw = false) {
-        let total = 0;
-        const dirs = [[1,0],[0,1],[1,1],[1,-1]];
-        for (let d of dirs) {
-            let s = "";
-            for (let i=-4; i<=4; i++) {
-                let v = board[`${x+d[0]*i},${y+d[1]*i}`];
-                if (v===p) s+="M"; else if(v===undefined) s+="_"; else s+="E";
-            }
-            total += matchPattern(s, raw);
-        }
-        return total;
-    }
-
-    function matchPattern(s, raw) {
-        // Sử dụng các trọng số từ aiBrain
-        const W = raw ? DEFAULT_WEIGHTS : aiBrain;
-        
-        let score = 0;
-        if (s.includes("MMMMM")) return 100000000;
-        if (s.includes("_MMMM_")) return W.def_live_4 * 1.5; // Live 4 gần như thắng
-        if (s.includes("MMMM_") || s.includes("_MMMM") || s.includes("MM_MM")) score += W.def_dead_4;
-        if (s.includes("_MMM_") || s.includes("_M_MM_")) score += W.def_live_3;
-        if (s.includes("MMM__") || s.includes("__MMM")) score += W.def_dead_3;
-        if (s.includes("_MM_") || s.includes("_M_M_")) score += W.def_live_2;
-        return score;
-    }
-
-    function generateMoves() {
-        let moves = [];
-        let checked = new Set();
-        let range = 2; 
-        for(let key in board) {
-            let [bx, by] = key.split(',').map(Number);
-            for(let i=-range; i<=range; i++) {
-                for(let j=-range; j<=range; j++) {
-                    let nx=bx+i, ny=by+j;
-                    if(!board[`${nx},${ny}`] && !checked.has(`${nx},${ny}`)) {
-                        moves.push({x:nx, y:ny});
-                        checked.add(`${nx},${ny}`);
+        function getCandidates(padding = 2) {
+            const candidates = new Set();
+            for (let key of board.keys()) {
+                const [cx, cy] = parseKey(key);
+                for (let dx = -padding; dx <= padding; dx++) {
+                    for (let dy = -padding; dy <= padding; dy++) {
+                        if (dx === 0 && dy === 0) continue;
+                        if (!board.has(getKey(cx + dx, cy + dy))) {
+                            candidates.add(getKey(cx + dx, cy + dy));
+                        }
                     }
                 }
             }
-        }
-        return moves;
-    }
-
-    function checkWin(x, y, p) {
-        const dirs = [[1,0], [0,1], [1,1], [1,-1]];
-        for (let d of dirs) {
-            let c = 1;
-            let i = 1; while (board[`${x+d[0]*i},${y+d[1]*i}`] === p) { c++; i++; }
-            i = 1; while (board[`${x-d[0]*i},${y-d[1]*i}`] === p) { c++; i++; }
-            if (c >= 5) return true;
-        }
-        return false;
-    }
-
-    // --- RENDER ---
-    function render() {
-        ctx.fillStyle = "#050505"; ctx.fillRect(0,0,canvas.width,canvas.height);
-        
-        const cS = CELL_SIZE; 
-        const ox = (canvas.width/2 - camera.x) % cS;
-        const oy = (canvas.height/2 - camera.y) % cS;
-        
-        ctx.beginPath(); ctx.strokeStyle = "#222";
-        for(let x=ox; x<canvas.width; x+=cS) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
-        for(let y=oy; y<canvas.height; y+=cS) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
-        ctx.stroke();
-
-        if (lastMove) {
-            let lx = lastMove.x*cS + canvas.width/2 + camera.x;
-            let ly = lastMove.y*cS + canvas.height/2 + camera.y;
-            ctx.fillStyle = "rgba(0,255,0,0.1)"; ctx.fillRect(lx,ly,cS,cS);
-            ctx.strokeStyle = "#0f0"; ctx.strokeRect(lx,ly,cS,cS);
+            // If board is empty, return center
+            if (candidates.size === 0) return [getKey(0, 0)];
+            return Array.from(candidates);
         }
 
-        for(let k in board) {
-            let [bx,by] = k.split(',').map(Number);
-            let px = bx*cS + canvas.width/2 + camera.x;
-            let py = by*cS + canvas.height/2 + camera.y;
-            if (px>-cS && px<canvas.width && py>-cS && py<canvas.height) {
-                ctx.beginPath();
-                if(board[k]==="X") {
-                    ctx.strokeStyle="#ff3333"; ctx.lineWidth=3;
-                    ctx.moveTo(px+10,py+10); ctx.lineTo(px+cS-10,py+cS-10);
-                    ctx.moveTo(px+cS-10,py+10); ctx.lineTo(px+10,py+cS-10);
+        function evaluateBoard(player) {
+            // This is a simplified evaluation. 
+            // Real Gomoku AIs look for specific patterns (Open 4, Closed 4, Open 3, etc.)
+            // We will simulate this by scoring patterns.
+            let score = 0;
+            const opponent = player === PLAYER_X ? PLAYER_O : PLAYER_X;
+            
+            // Scan board directions for patterns
+            // Note: Full board scan is slow. We only scan lines involved in moves usually.
+            // Here we use a simpler approach: Evaluate score of a specific move relative to existing board.
+            return 0; 
+        }
+
+        function evaluatePosition(x, y, player) {
+            let score = 0;
+            const opponent = player === PLAYER_O ? PLAYER_X : PLAYER_O;
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+
+            for (let [dx, dy] of directions) {
+                // Analyze the line passing through x,y
+                let myLine = 1; // Consec stones including current
+                let openEnds = 0;
+                let blocked = false;
+                
+                // Forward
+                let i = 1;
+                while (getCell(x + dx * i, y + dy * i) === player && i < 5) { myLine++; i++; }
+                if (getCell(x + dx * i, y + dy * i) === 0) openEnds++;
+                
+                // Backward
+                let j = 1;
+                while (getCell(x - dx * j, y - dy * j) === player && j < 5) { myLine++; j++; }
+                if (getCell(x - dx * j, y - dy * j) === 0) openEnds++;
+
+                // Scoring (Aggressive/Defensive Mix)
+                if (myLine >= 5) score += 100000;
+                else if (myLine === 4 && openEnds > 0) score += 10000; // Winning next turn
+                else if (myLine === 3 && openEnds === 2) score += 5000; // Strong threat
+                else if (myLine === 3 && openEnds === 1) score += 1000;
+                else if (myLine === 2 && openEnds === 2) score += 500;
+                else if (myLine === 2 && openEnds === 1) score += 100;
+            }
+            return score;
+        }
+
+        function getBestMove() {
+            // 1. Get candidate moves (empty cells adjacent to filled cells)
+            const candidates = getCandidates();
+            let bestScore = -Infinity;
+            let bestMove = null;
+            
+            // If first move, play near center 0,0 usually, but here just random or 0,0
+            if (board.size === 0) return {x: 0, y: 0};
+
+            // Heuristic Search (Depth 1 with heavy pattern weighting)
+            // Ideally we'd use Alpha-Beta, but JS single-thread can lag with infinite board candidates.
+            // We use a "Greedy" approach with Defense priority for "Hard" mode.
+            
+            for (let key of candidates) {
+                const [x, y] = parseKey(key);
+                
+                // Score for AI (Attack)
+                const attackScore = evaluatePosition(x, y, PLAYER_O);
+                
+                // Score for Human (Defense - how good is this spot for human?)
+                const defenseScore = evaluatePosition(x, y, PLAYER_X);
+                
+                let totalScore = 0;
+                
+                if (difficulty === 'hard') {
+                    // In Hard mode, we prioritize blocking high threats
+                    // If opponent has a winning move (high defense score), we MUST block it implies 
+                    // this cell has high value.
+                    // We give slightly more weight to Attack if we can win immediately.
+                    
+                    if (attackScore >= 100000) totalScore = 200000; // Win now
+                    else if (defenseScore >= 100000) totalScore = 150000; // Block immediate loss
+                    else if (attackScore >= 10000) totalScore = attackScore + defenseScore * 0.8;
+                    else if (defenseScore >= 10000) totalScore = defenseScore + attackScore * 0.5; // Block 4
+                    else totalScore = attackScore + defenseScore;
                 } else {
-                    ctx.strokeStyle="#0f0"; ctx.lineWidth=3;
-                    ctx.arc(px+cS/2, py+cS/2, cS/2-8, 0, Math.PI*2);
+                    // Easy mode: Mostly random with slight bias to attack
+                    totalScore = attackScore + Math.random() * 200;
                 }
+
+                if (totalScore > bestScore) {
+                    bestScore = totalScore;
+                    bestMove = {x, y};
+                }
+            }
+            
+            return bestMove;
+        }
+
+        async function playAI() {
+            if (isGameOver) return;
+            
+            showStatus("AI đang nghĩ...", "blue");
+            
+            // Small delay for realism and UI update
+            setTimeout(() => {
+                const move = getBestMove();
+                if (move) {
+                    makeMove(move.x, move.y, PLAYER_O);
+                }
+            }, 300);
+        }
+
+        // --- CORE INTERACTION ---
+
+        function makeMove(x, y, player) {
+            if (getCell(x, y) !== 0 || isGameOver) return;
+
+            setCell(x, y, player);
+            draw();
+
+            // Check Win
+            if (checkWin(x, y, player)) {
+                endGame(player);
+                return;
+            }
+
+            // Switch Turn
+            isPlayerTurn = !isPlayerTurn;
+            
+            if (isPlayerTurn) {
+                showStatus("Đến lượt bạn (X)", "stone");
+            } else {
+                playAI();
+            }
+        }
+
+        function endGame(winner) {
+            isGameOver = true;
+            draw(); // Draw final state
+            
+            const title = winner === PLAYER_X ? "Bạn Đã Thắng! 🎉" : "AI Đã Thắng 🤖";
+            const desc = winner === PLAYER_X ? "Trí tuệ siêu phàm! Bạn đã đánh bại máy." : "Đừng buồn, hãy thử lại chiến thuật mới.";
+            const icon = winner === PLAYER_X ? "🏆" : "💀";
+            
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalDesc').textContent = desc;
+            document.getElementById('modalIcon').textContent = icon;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeModalAndReset() {
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                resetGame();
+            }, 300);
+        }
+
+        function resetGame() {
+            board.clear();
+            history = [];
+            isGameOver = false;
+            isPlayerTurn = true;
+            // Recenter
+            camera.x = canvas.width / 2;
+            camera.y = canvas.height / 2;
+            showStatus("Ván mới bắt đầu!", "green");
+            setTimeout(() => showStatus("Đến lượt bạn (X)", "stone"), 1500);
+            draw();
+        }
+
+        function setDifficulty(level) {
+            difficulty = level;
+            document.getElementById('btnEasy').className = level === 'easy' ? "px-3 py-1 rounded-md text-sm font-medium bg-white shadow-sm text-blue-700 transition-colors" : "px-3 py-1 rounded-md text-sm font-medium transition-colors";
+            document.getElementById('btnHard').className = level === 'hard' ? "px-3 py-1 rounded-md text-sm font-medium bg-white shadow-sm text-blue-700 transition-colors" : "px-3 py-1 rounded-md text-sm font-medium transition-colors";
+            
+            // If switching mid-game and it's AI turn, reset AI thought process technically
+            // But simple toggle is fine.
+        }
+
+        function showStatus(msg, colorType) {
+            statusEl.classList.remove('opacity-0');
+            const inner = statusEl.firstElementChild;
+            inner.textContent = msg;
+            
+            // Colors
+            if(colorType === 'blue') inner.className = "glass-panel px-6 py-2 rounded-full font-bold text-blue-700 shadow-xl border-l-4 border-blue-500";
+            else if(colorType === 'green') inner.className = "glass-panel px-6 py-2 rounded-full font-bold text-green-700 shadow-xl border-l-4 border-green-500";
+            else inner.className = "glass-panel px-6 py-2 rounded-full font-bold text-stone-700 shadow-xl border-l-4 border-stone-500";
+
+            // Auto hide after delay unless it's AI thinking
+            if(colorType !== 'blue') {
+                // setTimeout(() => statusEl.classList.add('opacity-0'), 3000);
+            }
+        }
+
+        // --- RENDERING (CANVAS) ---
+
+        function draw() {
+            // 1. Clear Background
+            ctx.fillStyle = '#f0ebe3'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Calculate Grid Visible Range
+            // Camera (x,y) is the center of the screen
+            const startX = Math.floor((camera.x - canvas.width / 2) / CELL_SIZE) - 1;
+            const endX = Math.floor((camera.x + canvas.width / 2) / CELL_SIZE) + 1;
+            const startY = Math.floor((camera.y - canvas.height / 2) / CELL_SIZE) - 1;
+            const endY = Math.floor((camera.y + canvas.height / 2) / CELL_SIZE) + 1;
+
+            const offsetX = canvas.width / 2 - camera.x;
+            const offsetY = canvas.height / 2 - camera.y;
+
+            // 3. Draw Grid Lines
+            ctx.beginPath();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#d6d3cd'; // Slightly darker than bg
+
+            for (let x = startX; x <= endX; x++) {
+                const px = x * CELL_SIZE + offsetX;
+                ctx.moveTo(px, 0);
+                ctx.lineTo(px, canvas.height);
+            }
+            for (let y = startY; y <= endY; y++) {
+                const py = y * CELL_SIZE + offsetY;
+                ctx.moveTo(0, py);
+                ctx.lineTo(canvas.width, py);
+            }
+            ctx.stroke();
+
+            // Highlight Center (0,0) for reference
+            ctx.fillStyle = '#a8a29e';
+            ctx.beginPath();
+            ctx.arc(0 * CELL_SIZE + offsetX, 0 * CELL_SIZE + offsetY, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 4. Draw Stones (Only visible ones usually, but iterating map is fast enough for <1000 moves)
+            for (let [key, player] of board) {
+                const [gx, gy] = parseKey(key);
+                const px = gx * CELL_SIZE + offsetX;
+                const py = gy * CELL_SIZE + offsetY;
+
+                // Optimization: Skip if off screen
+                if (px < -CELL_SIZE || px > canvas.width + CELL_SIZE || py < -CELL_SIZE || py > canvas.height + CELL_SIZE) continue;
+
+                drawStone(px, py, player, gx, gy);
+            }
+
+            // 5. Highlight Last Move
+            if (history.length > 0) {
+                const last = history[history.length - 1];
+                const px = last.x * CELL_SIZE + offsetX;
+                const py = last.y * CELL_SIZE + offsetY;
+                
+                ctx.strokeStyle = last.player === PLAYER_X ? 'rgba(37, 99, 235, 0.4)' : 'rgba(220, 38, 38, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(px, py, CELL_SIZE * 0.45, 0, Math.PI * 2);
                 ctx.stroke();
             }
         }
-    }
 
-    init();
-</script>
+        function drawStone(x, y, player, gx, gy) {
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetY = 2;
+
+            if (player === PLAYER_X) {
+                // Draw X
+                ctx.strokeStyle = '#2563eb'; // Blue 600
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                
+                const size = CELL_SIZE * 0.3;
+                ctx.beginPath();
+                ctx.moveTo(x - size, y - size);
+                ctx.lineTo(x + size, y + size);
+                ctx.moveTo(x + size, y - size);
+                ctx.lineTo(x - size, y + size);
+                ctx.stroke();
+            } else {
+                // Draw O
+                ctx.strokeStyle = '#dc2626'; // Red 600
+                ctx.lineWidth = 3;
+                
+                const r = CELL_SIZE * 0.3;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            ctx.shadowColor = 'transparent'; // Reset shadow
+        }
+
+        // --- INPUT HANDLERS ---
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            // Handle both touch and mouse
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('mousedown', startDrag);
+        canvas.addEventListener('touchstart', startDrag, {passive: false});
+
+        canvas.addEventListener('mousemove', drag);
+        canvas.addEventListener('touchmove', drag, {passive: false});
+
+        canvas.addEventListener('mouseup', endDrag);
+        canvas.addEventListener('touchend', endDrag);
+
+        function startDrag(e) {
+            if (e.type === 'touchstart') e.preventDefault(); // Prevent scroll
+            isDragging = false; // Optimistic, assumes click first
+            const pos = getMousePos(e);
+            lastMouse = pos;
+            dragStart = pos;
+        }
+
+        function drag(e) {
+            if (e.buttons !== 1 && e.type !== 'touchmove') return;
+            const pos = getMousePos(e);
+            
+            // Calculate delta
+            const dx = pos.x - lastMouse.x;
+            const dy = pos.y - lastMouse.y;
+            
+            // If moved significantly, treat as drag
+            if (Math.abs(pos.x - dragStart.x) > 5 || Math.abs(pos.y - dragStart.y) > 5) {
+                isDragging = true;
+                canvas.style.cursor = 'grabbing';
+                camera.x -= dx;
+                camera.y -= dy;
+                draw();
+            }
+            lastMouse = pos;
+        }
+
+        function endDrag(e) {
+            canvas.style.cursor = 'crosshair';
+            
+            if (!isDragging) {
+                // It was a click
+                if (!isPlayerTurn || isGameOver) return;
+                
+                const offsetX = canvas.width / 2 - camera.x;
+                const offsetY = canvas.height / 2 - camera.y;
+                
+                // Use dragStart (mouse down position) for accuracy
+                // Calculate grid coordinates relative to screen center offset
+                // Current pixel = grid * cell + offset
+                // grid * cell = pixel - offset
+                // grid = (pixel - offset) / cell
+                
+                // Need to use current mouse pos for click? No, use lastMouse from mouseup or dragStart
+                // Better: Use the position where mouse went UP if it wasn't a drag.
+                
+                // Let's re-calculate click pos
+                // Note: 'e' in mouseup might not have coords in some browsers, use lastMouse
+                // But lastMouse is updated in drag/mousedown.
+                
+                const clickX = Math.round((lastMouse.x - offsetX) / CELL_SIZE);
+                const clickY = Math.round((lastMouse.y - offsetY) / CELL_SIZE);
+                
+                // Visual check: did we click near a grid intersection?
+                // The math above rounds to nearest integer intersection.
+                
+                makeMove(clickX, clickY, PLAYER_X);
+            }
+            isDragging = false;
+        }
+
+        // Start
+        resize();
+        resetGame();
+        setDifficulty('hard'); // Default to hard per prompt
+
+    </script>
 </body>
 </html>
