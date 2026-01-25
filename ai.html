@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Studio | Trải nghiệm Trí tuệ Nhân tạo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at top right, #fef3c7, transparent),
+                        radial-gradient(circle at bottom left, #fff7ed, transparent),
+                        #fafaf9;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .chat-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: #e7e5e4;
+            border-radius: 10px;
+        }
+
+        .message-appear {
+            animation: slideUp 0.3s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: #a8a29e;
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+        /* Markdown Styling */
+        .prose pre {
+            background: #1c1917 !important;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            margin: 0.5rem 0;
+            overflow-x: auto;
+        }
+        .prose code { color: #f97316; font-weight: 600; }
+        .prose p { margin-bottom: 0.75rem; }
+    </style>
+    <!-- Chosen Palette: Sand & Orange - Thanh lịch, hiện đại và tạo cảm giác thân thiện. -->
+</head>
+<body class="flex items-center justify-center p-0 sm:p-4">
+
+    <div class="w-full max-w-5xl h-full sm:h-[90vh] glass-panel rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden relative">
+        
+        <!-- Header -->
+        <header class="p-4 sm:p-6 border-b border-stone-200/50 flex justify-between items-center bg-white/40">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200">
+                    <span class="text-white font-bold text-xl">Σ</span>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-stone-800 leading-tight">AI Chat</h1>
+                    <div class="flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></span>
+                        <span class="text-xs text-stone-500 font-medium">Online</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="clearChat()" class="p-2 hover:bg-stone-100 rounded-lg transition text-stone-400 hover:text-stone-600">
+                <span class="text-xs font-semibold uppercase tracking-wider">Xóa lịch sử</span>
+            </button>
+        </header>
+
+        <!-- Chat Container -->
+        <main id="chat-window" class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 chat-scroll bg-transparent">
+            <!-- Chào mừng -->
+            <div class="flex justify-center py-10">
+                <div class="text-center max-w-sm">
+                    <div class="w-16 h-16 bg-white rounded-2xl shadow-sm mx-auto flex items-center justify-center mb-4 border border-stone-100">
+                        <span class="text-2xl">✨</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-stone-800 mb-2">Xin chào!</h2>
+                    <p class="text-sm text-stone-500">Tôi là trợ lý AI được làm bỏi Duy Minh. Bạn muốn tìm hiểu gì hôm nay?</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Typing Indicator (Hidden by default) -->
+        <div id="typing-indicator" class="hidden px-8 py-4">
+            <div class="flex items-start space-x-3">
+                <div class="w-8 h-8 rounded-lg bg-stone-200 flex-shrink-0"></div>
+                <div class="bg-stone-100 px-4 py-3 rounded-2xl rounded-tl-none">
+                    <div class="flex space-x-1">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <footer class="p-4 sm:p-6 bg-white/60 border-t border-stone-200/50">
+            <div class="max-w-3xl mx-auto relative">
+                <div class="flex items-end space-x-2 bg-white rounded-2xl border border-stone-200 p-2 shadow-sm focus-within:ring-2 focus-within:ring-orange-500/20 focus-within:border-orange-500 transition-all">
+                    <textarea 
+                        id="user-input"
+                        rows="1"
+                        placeholder="Nhập câu hỏi của bạn..."
+                        class="w-full bg-transparent border-none focus:ring-0 py-3 px-3 text-stone-700 resize-none max-h-40 chat-scroll"
+                        oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                    ></textarea>
+                    <button 
+                        onclick="handleSend()"
+                        id="send-btn"
+                        class="bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-xl transition shadow-md shadow-orange-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-[10px] text-center text-stone-400 mt-3 font-medium uppercase tracking-widest">Powered by NT.DuyMinh</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const API_KEY = "AIzaSyBA_8Is0wTXRKAGWjrlE3zU5tXujjASQo0";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+        
+        let chatHistory = [];
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Hàm xử lý khi gửi tin nhắn
+        async function handleSend() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Vô hiệu hóa input
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            // Hiển thị tin nhắn User
+            appendMessage('user', text);
+            
+            // Hiện trạng thái đang gõ
+            typingIndicator.classList.remove('hidden');
+            scrollToBottom();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [...chatHistory, { parts: [{ text: text }] }]
+                    })
+                });
+
+                const data = await response.json();
+                const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "Xin lỗi, tôi gặp trục trặc khi xử lý câu hỏi này.";
+
+                // Lưu vào lịch sử (Memory)
+                chatHistory.push({ role: "user", parts: [{ text: text }] });
+                chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
+
+                // Hiển thị tin nhắn AI
+                appendMessage('ai', aiResponse);
+
+            } catch (error) {
+                appendMessage('ai', "Lỗi kết nối API. Hãy kiểm tra lại API Key hoặc kết nối mạng.");
+            } finally {
+                typingIndicator.classList.add('hidden');
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+                scrollToBottom();
+            }
+        }
+
+        function appendMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} message-appear`;
+
+            const innerHTML = role === 'user' 
+                ? `
+                    <div class="max-w-[85%] bg-orange-500 text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm sm:text-base">
+                        ${text}
+                    </div>
+                `
+                : `
+                    <div class="flex items-start space-x-3 max-w-[90%]">
+                        <div class="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0 text-orange-600 text-xs font-bold">AI</div>
+                        <div class="bg-white border border-stone-100 px-5 py-4 rounded-2xl rounded-tl-none shadow-sm text-sm sm:text-base text-stone-700 prose max-w-none">
+                            ${marked.parse(text)}
+                        </div>
+                    </div>
+                `;
+            
+            msgDiv.innerHTML = innerHTML;
+            chatWindow.appendChild(msgDiv);
+        }
+
+        function scrollToBottom() {
+            chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+        }
+
+        function clearChat() {
+            chatWindow.innerHTML = `
+                <div class="flex justify-center py-10">
+                    <div class="text-center max-w-sm">
+                        <div class="w-16 h-16 bg-white rounded-2xl shadow-sm mx-auto flex items-center justify-center mb-4 border border-stone-100">
+                            <span class="text-2xl">✨</span>
+                        </div>
+                        <h2 class="text-xl font-bold text-stone-800 mb-2">Lịch sử đã được xóa</h2>
+                        <p class="text-sm text-stone-500">Bắt đầu một cuộc hội thoại mới thôi!</p>
+                    </div>
+                </div>
+            `;
+            chatHistory = [];
+        }
+
+        // Xử lý phím Enter để gửi
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+    </script>
+</body>
+</html>
